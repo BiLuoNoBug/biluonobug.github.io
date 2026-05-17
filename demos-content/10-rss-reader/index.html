@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RSS 阅读器 · biluo</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22263a;
+    --border: #2e3347;
+    --text: #e4e7f1;
+    --text2: #8892b0;
+    --accent: #6c8cff;
+    --accent2: #a5b4fc;
+    --green: #34d399;
+    --red: #f87171;
+    --orange: #fb923c;
+    --purple: #c084fc;
+  }
+  body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+  
+  .header-bar {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    height: 56px;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .header-bar .logo { font-weight: 700; font-size: 16px; color: var(--accent); display: flex; align-items: center; gap: 8px; }
+  .header-bar .logo svg { width: 20px; height: 20px; }
+  
+  .feeds-sidebar {
+    width: 280px;
+    min-width: 280px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    height: calc(100vh - 56px);
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+  .feeds-sidebar .sidebar-header {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .feeds-sidebar .sidebar-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text2); font-weight: 600; }
+  .add-feed-btn { background: var(--accent); color: #fff; border: none; border-radius: 6px; width: 28px; height: 28px; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+  .add-feed-btn:hover { background: var(--accent2); transform: scale(1.1); }
+  
+  .feeds-list { flex: 1; overflow-y: auto; }
+  .feed-item { padding: 12px 16px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.15s; display: flex; align-items: flex-start; gap: 10px; }
+  .feed-item:hover { background: var(--surface2); }
+  .feed-item.active { background: var(--surface2); border-left: 3px solid var(--accent); }
+  .feed-favicon { width: 20px; height: 20px; border-radius: 4px; background: var(--surface2); flex-shrink: 0; margin-top: 2px; object-fit: contain; }
+  .feed-info { flex: 1; min-width: 0; }
+  .feed-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .feed-meta { font-size: 11px; color: var(--text2); margin-top: 3px; }
+  .feed-delete { background: none; border: none; color: var(--text2); cursor: pointer; font-size: 14px; opacity: 0; transition: opacity 0.15s; padding: 2px; }
+  .feed-item:hover .feed-delete { opacity: 1; }
+  .feed-delete:hover { color: var(--red); }
+  
+  .main-content { flex: 1; display: flex; flex-direction: column; min-width: 0; height: calc(100vh - 56px); }
+  
+  .toolbar { padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; background: var(--surface); flex-wrap: wrap; }
+  .toolbar input[type="text"] { flex: 1; min-width: 200px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; color: var(--text); font-size: 13px; font-family: 'Inter', sans-serif; outline: none; transition: border-color 0.2s; }
+  .toolbar input[type="text"]:focus { border-color: var(--accent); }
+  .toolbar input[type="text"]::placeholder { color: var(--text2); }
+  .tag-filter { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tag-btn { background: var(--surface2); border: 1px solid var(--border); border-radius: 20px; padding: 5px 12px; font-size: 11px; color: var(--text2); cursor: pointer; transition: all 0.15s; font-family: 'Inter', sans-serif; }
+  .tag-btn:hover, .tag-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .refresh-btn { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; color: var(--text); font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s; font-family: 'Inter', sans-serif; }
+  .refresh-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .refresh-btn.loading { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  
+  .articles-area { flex: 1; overflow-y: auto; padding: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-content: start; }
+  @media (max-width: 900px) { .articles-area { grid-template-columns: 1fr; } }
+  
+  .article-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px; cursor: pointer; transition: all 0.2s; display: flex; flex-direction: column; gap: 10px; }
+  .article-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(108,140,255,0.1); }
+  .article-card.unread .article-title { font-weight: 700; }
+  .article-card.read { opacity: 0.6; }
+  .article-title { font-size: 14px; line-height: 1.5; color: var(--text); }
+  .article-desc { font-size: 12px; color: var(--text2); line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .article-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .article-source { font-size: 11px; color: var(--accent); background: rgba(108,140,255,0.1); padding: 2px 8px; border-radius: 10px; font-weight: 500; }
+  .article-date { font-size: 11px; color: var(--text2); }
+  .article-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+  .article-tag { font-size: 10px; background: var(--surface2); color: var(--text2); padding: 2px 7px; border-radius: 8px; }
+  
+  .empty-state { grid-column: 1/-1; text-align: center; padding: 60px 20px; color: var(--text2); }
+  .empty-state svg { width: 48px; height: 48px; margin-bottom: 16px; opacity: 0.5; }
+  .empty-state p { font-size: 14px; }
+  
+  .add-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px); }
+  .add-modal { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 28px; width: 420px; max-width: 90vw; }
+  .add-modal h3 { font-size: 16px; margin-bottom: 20px; }
+  .add-modal input { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; color: var(--text); font-size: 13px; margin-bottom: 12px; outline: none; font-family: 'Inter', sans-serif; }
+  .add-modal input:focus { border-color: var(--accent); }
+  .presets { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .preset-btn { background: var(--surface2); border: 1px solid var(--border); border-radius: 20px; padding: 5px 12px; font-size: 12px; cursor: pointer; transition: all 0.15s; font-family: 'Inter', sans-serif; color: var(--text2); }
+  .preset-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .add-modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+  .btn-cancel { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 16px; color: var(--text); font-size: 13px; cursor: pointer; font-family: 'Inter', sans-serif; }
+  .btn-add { background: var(--accent); border: none; border-radius: 8px; padding: 8px 20px; color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; font-family: 'Inter', sans-serif; }
+  .btn-add:hover { background: var(--accent2); }
+  
+  .article-reader { display: none; }
+  .article-reader.open { display: flex; flex-direction: column; height: calc(100vh - 56px); }
+  .article-reader .reader-header { padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; background: var(--surface); }
+  .back-btn { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text); font-size: 14px; }
+  .reader-title { flex: 1; font-size: 15px; font-weight: 600; }
+  .reader-content { flex: 1; overflow-y: auto; padding: 24px; max-width: 720px; margin: 0 auto; width: 100%; }
+  .reader-content h1,.reader-content h2,.reader-content h3 { margin: 1.5em 0 0.5em; line-height: 1.3; }
+  .reader-content p { line-height: 1.8; color: var(--text2); margin-bottom: 1em; font-size: 14px; }
+  .reader-content a { color: var(--accent); }
+  .reader-content img { max-width: 100%; border-radius: 8px; margin: 1em 0; }
+  .reader-content ul,.reader-content ol { padding-left: 1.5em; color: var(--text2); font-size: 14px; }
+  .reader-content li { margin-bottom: 0.5em; }
+  .reader-content pre { background: var(--surface2); border-radius: 8px; padding: 14px; overflow-x: auto; margin: 1em 0; }
+  .reader-content code { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+  .reader-content blockquote { border-left: 3px solid var(--accent); padding-left: 14px; color: var(--text2); margin: 1em 0; font-style: italic; }
+  .reader-open-link { display: inline-block; margin-top: 16px; background: var(--accent); color: #fff; text-decoration: none; padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 500; }
+  
+  .toast { position: fixed; bottom: 24px; right: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 18px; font-size: 13px; z-index: 2000; transition: all 0.3s; transform: translateY(80px); opacity: 0; }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.error { border-color: var(--red); color: var(--red); }
+  .toast.success { border-color: var(--green); color: var(--green); }
+</style>
+</head>
+<body>
+
+<div class="header-bar">
+  <div class="logo">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1"/></svg>
+    RSS 阅读器
+  </div>
+</div>
+
+<div style="display:flex; height: calc(100vh - 56px);">
+  <aside class="feeds-sidebar">
+    <div class="sidebar-header">
+      <span class="sidebar-title">订阅源</span>
+      <button class="add-feed-btn" onclick="openAddModal()" title="添加订阅源">+</button>
+    </div>
+    <div class="feeds-list" id="feedsList"></div>
+  </aside>
+
+  <main class="main-content">
+    <div class="toolbar">
+      <input type="text" id="searchInput" placeholder="搜索文章标题或描述…" oninput="filterArticles()">
+      <div class="tag-filter" id="tagFilter"></div>
+      <button class="refresh-btn" id="refreshBtn" onclick="refreshAll()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        刷新
+      </button>
+    </div>
+    <div class="articles-area" id="articlesArea"></div>
+  </main>
+
+  <aside class="article-reader" id="articleReader">
+    <div class="reader-header">
+      <button class="back-btn" onclick="closeReader()">←</button>
+      <div class="reader-title" id="readerTitle"></div>
+      <a class="reader-open-link" id="readerLink" href="#" target="_blank" style="font-size:12px;padding:6px 12px;">原文链接 ↗</a>
+    </div>
+    <div class="reader-content" id="readerContent"></div>
+  </aside>
+</div>
+
+<div class="add-modal-overlay" id="addModalOverlay" style="display:none" onclick="if(event.target===this)closeAddModal()">
+  <div class="add-modal">
+    <h3>添加 RSS 订阅源</h3>
+    <input type="text" id="feedUrlInput" placeholder="输入 RSS/Atom 链接，如 https://example.com/feed.xml">
+    <div style="font-size:11px; color:var(--text2); margin-bottom:8px;">推荐订阅源：</div>
+    <div class="presets">
+      <button class="preset-btn" onclick="document.getElementById('feedUrlInput').value='https://rsshub.app/bbcnews/chinese'">BBC 中文</button>
+      <button class="preset-btn" onclick="document.getElementById('feedUrlInput').value='https://rsshub.app/reuters/world/china'">Reuters 中国</button>
+      <button class="preset-btn" onclick="document.getElementById('feedUrlInput').value='https://rsshub.app/nytimes/world/china'">NYTimes</button>
+      <button class="preset-btn" onclick="document.getElementById('feedUrlInput').value='https://hnrss.org/frontpage'">Hacker News</button>
+      <button class="preset-btn" onclick="document.getElementById('feedUrlInput').value='https://rsshub.app/apnews/topnews'">AP News</button>
+      <button class="preset-btn" onclick="document.getElementById('feedUrlInput').value='https://rsshub.app/theguardian/world/china'">卫报 中国</button>
+    </div>
+    <div class="add-modal-actions">
+      <button class="btn-cancel" onclick="closeAddModal()">取消</button>
+      <button class="btn-add" onclick="addFeed()">添加</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const PRESETS = [
+  { name: 'BBC 中文', url: 'https://rsshub.app/bbcnews/chinese', tags: ['新闻'] },
+  { name: 'Hacker News', url: 'https://hnrss.org/frontpage', tags: ['科技'] },
+  { name: 'Reuters World', url: 'https://rsshub.app/reuters/world/china', tags: ['新闻'] },
+  { name: 'MIT Tech Review', url: 'https://rsshub.app/technologyreview', tags: ['科技'] },
+  { name: 'The Verge', url: 'https://www.theverge.com/rss/index.xml', tags: ['科技'] },
+  { name: 'Nature News', url: 'https://rsshub.app/nature/news', tags: ['科学'] },
+  { name: 'Ars Technica', url: 'https://feeds.arstechnica.com/arstechnica/index', tags: ['科技'] },
+  { name: 'Dev.to', url: 'https://dev.to/feed', tags: ['开发'] },
+  { name: '煎蛋', url: 'https://rsshub.app/jandan/pic', tags: ['轻松'] },
+  { name: '少数派', url: 'https://rsshub.app/sspai/feed', tags: ['科技'] },
+];
+
+let state = {
+  feeds: (function() {
+    try { return JSON.parse(localStorage.getItem('rss-feeds') || '[]'); } catch { return []; }
+  })(),
+  articles: [],
+  activeFeed: null,
+  search: '',
+  activeTag: null,
+  readArticles: new Set(JSON.parse(localStorage.getItem('rss-read') || '[]')),
+};
+
+function save() {
+  localStorage.setItem('rss-feeds', JSON.stringify(state.feeds));
+  localStorage.setItem('rss-read', JSON.stringify([...state.readArticles]));
+}
+
+function toast(msg, type='success') {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.className = 'toast ' + type + ' show';
+  setTimeout(() => t.className = 'toast', 2500);
+}
+
+async function fetchFeed(url) {
+  const proxy = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
+  const resp = await fetch(proxy);
+  if (!resp.ok) throw new Error('Fetch failed');
+  const text = await resp.text();
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(text, 'text/xml');
+  const parseError = doc.querySelector('parsererror');
+  if (parseError) throw new Error('Parse error');
+  
+  let items = [];
+  const rss = doc.querySelector('rss');
+  if (rss) {
+    const channel = rss.querySelector('channel');
+    const feedTitle = channel?.querySelector('title')?.textContent || 'RSS Feed';
+    const feedLink = channel?.querySelector('link')?.textContent || '';
+    doc.querySelectorAll('item').forEach(item => {
+      const title = item.querySelector('title')?.textContent || '';
+      const link = item.querySelector('link')?.textContent || '';
+      const desc = item.querySelector('description')?.textContent || item.querySelector('content\\:encoded')?.textContent || '';
+      const pubDate = item.querySelector('pubDate')?.textContent || '';
+      const author = item.querySelector('author')?.textContent || channel?.querySelector('managingEditor')?.textContent || '';
+      items.push({ title, link, desc, pubDate, author, feedTitle, feedLink });
+    });
+  } else {
+    const atomEntries = doc.querySelectorAll('entry');
+    const feedTitle = doc.querySelector('feed > title')?.textContent || 'Atom Feed';
+    const feedLink = doc.querySelector('feed > link')?.getAttribute('href') || '';
+    atomEntries.forEach(entry => {
+      const title = entry.querySelector('title')?.textContent || '';
+      const links = entry.querySelectorAll('link');
+      let link = '';
+      links.forEach(l => { if (l.getAttribute('rel') === 'alternate' || !link) link = l.getAttribute('href') || link; });
+      const desc = entry.querySelector('content')?.textContent || entry.querySelector('summary')?.textContent || '';
+      const pubDate = entry.querySelector('published')?.textContent || entry.querySelector('updated')?.textContent || '';
+      const author = entry.querySelector('author name')?.textContent || '';
+      items.push({ title, link, desc, pubDate, author, feedTitle, feedLink });
+    });
+  }
+  return items;
+}
+
+function stripHtml(html) {
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  return tmp.textContent || tmp.innerText || '';
+}
+
+function formatDate(ds) {
+  if (!ds) return '';
+  try {
+    const d = new Date(ds);
+    if (isNaN(d.getTime())) return ds.slice(0, 10);
+    const now = new Date();
+    const diff = now - d;
+    if (diff < 86400000) return '今天';
+    if (diff < 172800000) return '昨天';
+    return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+  } catch { return ds.slice(0, 10); }
+}
+
+function getFavicon(url) {
+  try {
+    const u = new URL(url);
+    return 'https://www.google.com/s2/favicons?domain=' + u.hostname + '&sz=32';
+  } catch { return ''; }
+}
+
+function extractTags(desc, title) {
+  const words = (desc + ' ' + title).toLowerCase();
+  const tagMap = { 'ai': 'AI', 'tech': '科技', 'science': '科学', 'news': '新闻', 'dev': '开发', 'web': 'Web', 'code': '代码' };
+  const found = [];
+  for (const [k, v] of Object.entries(tagMap)) {
+    if (words.includes(k)) found.push(v);
+  }
+  return [...new Set(found)].slice(0, 3);
+}
+
+async function loadAllFeeds() {
+  const results = [];
+  for (const feed of state.feeds) {
+    try {
+      const items = await fetchFeed(feed.url);
+      results.push(...items.map(a => ({ ...a, feedName: feed.name, feedUrl: feed.url, tags: extractTags(a.desc, a.title) })));
+    } catch (e) {
+      console.warn('Failed to load', feed.url, e.message);
+    }
+  }
+  results.sort((a, b) => new Date(b.pubDate) - new Date(a.pubDate));
+  state.articles = results;
+  renderAll();
+}
+
+function renderAll() {
+  renderFeeds();
+  renderTagFilter();
+  renderArticles();
+}
+
+function renderFeeds() {
+  const el = document.getElementById('feedsList');
+  if (state.feeds.length === 0) {
+    el.innerHTML = '<div style="padding:20px; text-align:center; color:var(--text2); font-size:13px;">暂无订阅源，<br>点击右上角 + 添加</div>';
+    return;
+  }
+  el.innerHTML = state.feeds.map((f, i) => `
+    <div class="feed-item ${state.activeFeed === i ? 'active' : ''}" onclick="selectFeed(${i})">
+      <img class="feed-favicon" src="${getFavicon(f.url)}" onerror="this.style.display='none'" alt="">
+      <div class="feed-info">
+        <div class="feed-name">${f.name}</div>
+        <div class="feed-meta">${f.url.slice(0, 30)}…</div>
+      </div>
+      <button class="feed-delete" onclick="event.stopPropagation();deleteFeed(${i})" title="删除">✕</button>
+    </div>
+  `).join('');
+}
+
+function renderTagFilter() {
+  const allTags = [...new Set(state.articles.flatMap(a => a.tags))];
+  const el = document.getElementById('tagFilter');
+  el.innerHTML = '<button class="tag-btn ' + (!state.activeTag ? 'active' : '') + '" onclick="setTag(null)">全部</button>' +
+    allTags.map(t => '<button class="tag-btn ' + (state.activeTag === t ? 'active' : '') + '" onclick="setTag(\'' + t + '\')">' + t + '</button>').join('');
+}
+
+function renderArticles() {
+  const el = document.getElementById('articlesArea');
+  let filtered = state.articles;
+  if (state.activeFeed !== null && state.activeFeed >= 0) {
+    filtered = filtered.filter(a => a.feedUrl === state.feeds[state.activeFeed]?.url);
+  }
+  if (state.search) {
+    const q = state.search.toLowerCase();
+    filtered = filtered.filter(a => a.title.toLowerCase().includes(q) || stripHtml(a.desc).toLowerCase().includes(q));
+  }
+  if (state.activeTag) {
+    filtered = filtered.filter(a => a.tags.includes(state.activeTag));
+  }
+  
+  if (filtered.length === 0) {
+    el.innerHTML = '<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1"/></svg><p>暂无文章<br><span style="font-size:12px;margin-top:8px;display:block;">添加订阅源或调整筛选条件</span></p></div>';
+    return;
+  }
+  
+  el.innerHTML = filtered.slice(0, 100).map(a => `
+    <div class="article-card ${state.readArticles.has(a.link) ? 'read' : 'unread'}" onclick="openArticle(${filtered.indexOf(a)})">
+      <div class="article-title">${a.title}</div>
+      <div class="article-desc">${stripHtml(a.desc).slice(0, 200)}</div>
+      <div class="article-meta">
+        <span class="article-source">${a.feedName || a.feedTitle}</span>
+        <span class="article-date">${formatDate(a.pubDate)}</span>
+        ${a.tags.map(t => '<span class="article-tag">' + t + '</span>').join('')}
+      </div>
+    </div>
+  `).join('');
+}
+
+function selectFeed(i) {
+  state.activeFeed = state.activeFeed === i ? null : i;
+  renderArticles();
+}
+
+function setTag(tag) { state.activeTag = tag; renderArticles(); }
+function filterArticles() { state.search = document.getElementById('searchInput').value; renderArticles(); }
+
+function openArticle(idx) {
+  const a = state.articles.filter(art => {
+    let ok = true;
+    if (state.activeFeed !== null) ok = ok && art.feedUrl === state.feeds[state.activeFeed]?.url;
+    if (state.search) { const q = state.search.toLowerCase(); ok = ok && (art.title.toLowerCase().includes(q) || stripHtml(art.desc).toLowerCase().includes(q)); }
+    if (state.activeTag) ok = ok && art.tags.includes(state.activeTag);
+    return ok;
+  })[idx];
+  if (!a) return;
+  
+  state.readArticles.add(a.link);
+  save();
+  renderArticles();
+  
+  document.getElementById('readerTitle').textContent = a.title;
+  document.getElementById('readerLink').href = a.link || '#';
+  const content = document.getElementById('readerContent');
+  content.innerHTML = '<h1 style="font-size:22px;margin-bottom:16px;line-height:1.3">' + a.title + '</h1>' +
+    '<p style="color:var(--text2);font-size:12px;margin-bottom:20px;">' + a.feedName + ' · ' + formatDate(a.pubDate) + (a.author ? ' · ' + a.author : '') + '</p>' +
+    a.desc;
+  document.getElementById('articleReader').classList.add('open');
+}
+
+function closeReader() {
+  document.getElementById('articleReader').classList.remove('open');
+}
+
+function openAddModal() {
+  document.getElementById('addModalOverlay').style.display = 'flex';
+  document.getElementById('feedUrlInput').value = '';
+  document.getElementById('feedUrlInput').focus();
+}
+
+function closeAddModal() {
+  document.getElementById('addModalOverlay').style.display = 'none';
+}
+
+async function addFeed() {
+  const url = document.getElementById('feedUrlInput').value.trim();
+  if (!url) return;
+  const btn = document.querySelector('.btn-add');
+  btn.textContent = '加载中…'; btn.disabled = true;
+  try {
+    const items = await fetchFeed(url);
+    if (items.length === 0) throw new Error('No items');
+    const feedTitle = items[0]?.feedTitle || 'RSS Feed';
+    state.feeds.push({ name: feedTitle, url, tags: [] });
+    save();
+    closeAddModal();
+    toast('订阅源添加成功！共 ' + items.length + ' 篇文章');
+    await loadAllFeeds();
+  } catch (e) {
+    toast('加载失败，请检查链接是否正确', 'error');
+  } finally {
+    btn.textContent = '添加'; btn.disabled = false;
+  }
+}
+
+function deleteFeed(i) {
+  state.feeds.splice(i, 1);
+  if (state.activeFeed === i) state.activeFeed = null;
+  else if (state.activeFeed > i) state.activeFeed--;
+  save();
+  toast('已删除订阅源');
+  loadAllFeeds();
+}
+
+async function refreshAll() {
+  const btn = document.getElementById('refreshBtn');
+  btn.classList.add('loading');
+  btn.disabled = true;
+  await loadAllFeeds();
+  btn.classList.remove('loading');
+  btn.disabled = false;
+  toast('刷新完成，共 ' + state.articles.length + ' 篇文章');
+}
+
+// Init
+(async function() {
+  if (state.feeds.length === 0) {
+    // Add default feeds
+    state.feeds = [
+      { name: 'Hacker News', url: 'https://hnrss.org/frontpage', tags: ['科技'] },
+      { name: 'The Verge', url: 'https://www.theverge.com/rss/index.xml', tags: ['科技'] },
+      { name: 'BBC 中文', url: 'https://rsshub.app/bbcnews/chinese', tags: ['新闻'] },
+    ];
+    save();
+  }
+  await loadAllFeeds();
+})();
+</script>
+</body>
+</html>
