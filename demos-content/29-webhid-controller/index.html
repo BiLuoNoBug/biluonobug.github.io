@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WebHID 游戏手柄控制器</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    background: #0a0a0f;
+    color: #e0e0e0;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 30px 20px;
+  }
+  h1 {
+    font-size: 1.5rem;
+    color: #00ff88;
+    margin-bottom: 8px;
+    text-shadow: 0 0 20px rgba(0,255,136,0.3);
+  }
+  .subtitle { color: #888; font-size: 0.85rem; margin-bottom: 30px; }
+  .controller-wrap {
+    display: flex;
+    gap: 40px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .controller {
+    position: relative;
+    width: 320px;
+    background: linear-gradient(145deg, #1a1a25, #12121a);
+    border-radius: 30px;
+    padding: 30px 20px 20px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .controller-body {
+    position: relative;
+    height: 200px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 10px;
+  }
+  .dpad {
+    width: 90px;
+    height: 90px;
+    position: relative;
+  }
+  .dpad-btn {
+    position: absolute;
+    background: #1e1e2a;
+    border: 1px solid rgba(255,255,255,0.08);
+    transition: all 0.1s;
+    cursor: pointer;
+  }
+  .dpad-btn.active { background: #00ff88; box-shadow: 0 0 15px rgba(0,255,136,0.6); }
+  .dpad-up, .dpad-down { width: 28px; height: 28px; left: 50%; transform: translateX(-50%); border-radius: 4px; }
+  .dpad-up { top: 0; }
+  .dpad-down { bottom: 0; }
+  .dpad-left, .dpad-right { height: 28px; width: 28px; top: 50%; transform: translateY(-50%); border-radius: 4px; }
+  .dpad-left { left: 0; }
+  .dpad-right { right: 0; }
+  .center-btns {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: center;
+  }
+  .center-btn {
+    width: 40px;
+    height: 14px;
+    background: #1a1a25;
+    border-radius: 7px;
+    border: 1px solid rgba(255,255,255,0.06);
+    cursor: pointer;
+    transition: all 0.1s;
+  }
+  .center-btn.active { background: #00ff88; box-shadow: 0 0 10px rgba(0,255,136,0.5); }
+  .abxy {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+    width: 90px;
+  }
+  .abxy-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: linear-gradient(145deg, #2a2a3a, #1a1a25);
+    border: 2px solid rgba(255,255,255,0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.1s;
+    color: #ccc;
+  }
+  .abxy-btn.active { background: #ff6b6b; border-color: #ff6b6b; color: white; box-shadow: 0 0 15px rgba(255,107,107,0.5); transform: scale(1.1); }
+  .abxy-btn:nth-child(2).active { background: #ffd93d; border-color: #ffd93d; box-shadow: 0 0 15px rgba(255,217,61,0.5); }
+  .abxy-btn:nth-child(3).active { background: #6bcfff; border-color: #6bcfff; box-shadow: 0 0 15px rgba(107,207,255,0.5); }
+  .abxy-btn:nth-child(4).active { background: #a8e6cf; border-color: #a8e6cf; box-shadow: 0 0 15px rgba(168,230,207,0.5); }
+  .sticks {
+    display: flex;
+    justify-content: space-between;
+    padding: 0 15px;
+    margin-top: 15px;
+  }
+  .stick {
+    width: 70px;
+    height: 70px;
+    background: radial-gradient(circle, #1a1a25 60%, #0f0f15 100%);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid rgba(255,255,255,0.06);
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+  }
+  .stick-dot {
+    width: 24px;
+    height: 24px;
+    background: #2a2a3a;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.1);
+    transition: all 0.1s;
+  }
+  .stick.active .stick-dot { background: #00ff88; box-shadow: 0 0 12px rgba(0,255,136,0.6); }
+  .triggers {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 15px;
+    padding: 0 20px;
+  }
+  .trigger {
+    width: 60px;
+    height: 30px;
+    background: linear-gradient(to bottom, #1e1e2a, #151520);
+    border-radius: 6px 6px 12px 12px;
+    border: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.65rem;
+    color: #555;
+    cursor: pointer;
+    transition: all 0.1s;
+  }
+  .trigger.active { background: #ff6b6b; color: white; box-shadow: 0 0 12px rgba(255,107,107,0.5); }
+  .log-section {
+    margin-top: 30px;
+    width: 100%;
+    max-width: 700px;
+  }
+  .log-title {
+    color: #888;
+    font-size: 0.8rem;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #444;
+    transition: all 0.3s;
+  }
+  .status-dot.connected { background: #00ff88; box-shadow: 0 0 10px rgba(0,255,136,0.5); }
+  .status-dot.input { background: #ffd93d; box-shadow: 0 0 10px rgba(255,217,61,0.5); }
+  .log-box {
+    background: #0f0f18;
+    border: 1px solid rgba(255,255,255,0.04);
+    border-radius: 12px;
+    padding: 15px;
+    height: 200px;
+    overflow-y: auto;
+    font-size: 0.75rem;
+    line-height: 1.8;
+  }
+  .log-entry { color: #666; }
+  .log-entry .time { color: #444; margin-right: 8px; }
+  .log-entry .type { color: #00ff88; margin-right: 8px; min-width: 70px; display: inline-block; }
+  .log-entry .type.press { color: #ff6b6b; }
+  .log-entry .value { color: #6bcfff; }
+  .connect-btn {
+    margin-top: 20px;
+    padding: 12px 30px;
+    background: linear-gradient(135deg, #1a1a25, #252535);
+    border: 1px solid rgba(0,255,136,0.3);
+    color: #00ff88;
+    border-radius: 25px;
+    font-family: inherit;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .connect-btn:hover { background: #1e2e25; box-shadow: 0 0 20px rgba(0,255,136,0.2); }
+  .connect-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .keyboard-hint {
+    margin-top: 15px;
+    color: #444;
+    font-size: 0.75rem;
+  }
+  .keyboard-hint kbd {
+    background: #1a1a25;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 4px;
+    padding: 2px 6px;
+    margin: 0 2px;
+    color: #666;
+  }
+  .input-vis {
+    margin-top: 20px;
+    width: 320px;
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 6px;
+  }
+  .input-dot {
+    height: 8px;
+    background: #1a1a25;
+    border-radius: 4px;
+    transition: all 0.05s;
+  }
+  .input-dot.active { background: #00ff88; box-shadow: 0 0 6px rgba(0,255,136,0.5); }
+  .led-strip {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    margin-top: 12px;
+  }
+  .led {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #222;
+    transition: all 0.05s;
+  }
+  .led.active { background: #00ff88; box-shadow: 0 0 6px rgba(0,255,136,0.6); }
+</style>
+</head>
+<body>
+
+<h1>🎮 WebHID 控制器演示</h1>
+<p class="subtitle">连接你的游戏手柄，感受浏览器里的硬件交互</p>
+
+<button class="connect-btn" id="connectBtn" onclick="connectDevice()">🔌 连接设备</button>
+
+<div class="controller-wrap">
+  <div class="controller">
+    <div class="controller-body">
+      <div class="dpad">
+        <div class="dpad-btn dpad-up" id="dup"></div>
+        <div class="dpad-btn dpad-down" id="ddown"></div>
+        <div class="dpad-btn dpad-left" id="dleft"></div>
+        <div class="dpad-btn dpad-right" id="dright"></div>
+      </div>
+      <div class="center-btns">
+        <div class="center-btn" id="c1"></div>
+        <div class="center-btn" id="c2"></div>
+      </div>
+      <div class="abxy">
+        <div class="abxy-btn" id="btn-y">Y</div>
+        <div class="abxy-btn" id="btn-x">X</div>
+        <div class="abxy-btn" id="btn-b">B</div>
+        <div class="abxy-btn" id="btn-a">A</div>
+      </div>
+    </div>
+    <div class="sticks">
+      <div class="stick" id="stick-l">
+        <div class="stick-dot" id="dot-l"></div>
+      </div>
+      <div class="stick" id="stick-r">
+        <div class="stick-dot" id="dot-r"></div>
+      </div>
+    </div>
+    <div class="triggers">
+      <div class="trigger" id="lt">LT</div>
+      <div class="trigger" id="rt">RT</div>
+    </div>
+    <div class="led-strip" id="leds">
+      <div class="led"></div><div class="led"></div><div class="led"></div>
+      <div class="led"></div><div class="led"></div><div class="led"></div>
+      <div class="led"></div><div class="led"></div>
+    </div>
+    <div class="input-vis" id="inputVis">
+      <div class="input-dot"></div><div class="input-dot"></div><div class="input-dot"></div>
+      <div class="input-dot"></div><div class="input-dot"></div><div class="input-dot"></div>
+      <div class="input-dot"></div><div class="input-dot"></div><div class="input-dot"></div>
+      <div class="input-dot"></div><div class="input-dot"></div><div class="input-dot"></div>
+    </div>
+  </div>
+</div>
+
+<p class="keyboard-hint">
+  键盘模拟：<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 方向 &nbsp;
+  <kbd>J</kbd><kbd>K</kbd><kbd>L</kbd><kbd>;</kbd> 按键 &nbsp;
+  <kbd>Q</kbd><kbd>E</kbd> 摇杆 &nbsp;
+  <kbd>Z</kbd><kbd>X</kbd> 扳机
+</p>
+
+<div class="log-section">
+  <div class="log-title">
+    <div class="status-dot" id="statusDot"></div>
+    <span id="statusText">等待连接</span>
+  </div>
+  <div class="log-box" id="logBox"></div>
+</div>
+
+<script>
+let device = null;
+let buttonStates = [];
+let axes = [0, 0, 0, 0];
+
+const keyMap = {
+  'w': 12, 'a': 14, 's': 13, 'd': 15,
+  'ArrowUp': 12, 'ArrowLeft': 14, 'ArrowDown': 13, 'ArrowRight': 15,
+  'j': 0, 'k': 1, 'l': 2, ';': 3,
+  'z': 6, 'x': 7
+};
+
+const keyAxes = { 'q': [0,-1,1], 'e': [0,1,1], 'ArrowUp': [1,-1,1], 'ArrowDown': [1,1,1], 'ArrowLeft': [0,-1,0], 'ArrowRight': [0,1,0] };
+
+function log(type, msg, value) {
+  const box = document.getElementById('logBox');
+  const now = new Date();
+  const t = now.toTimeString().slice(0,8);
+  const v = value !== undefined ? `<span class="value">[${value}]</span>` : '';
+  const cls = type === '按下' ? 'press' : '';
+  box.innerHTML = `<div class="log-entry"><span class="time">${t}</span><span class="type ${cls}">${type}</span>${msg}${v}</div>` + box.innerHTML;
+  if (box.children.length > 100) box.removeChild(box.lastChild);
+}
+
+function updateLEDs() {
+  const pressed = buttonStates.filter(b => b).length;
+  const leds = document.querySelectorAll('.led');
+  const level = pressed / 16;
+  leds.forEach((l, i) => {
+    l.classList.toggle('active', i / leds.length <= level);
+  });
+}
+
+function setBtn(index, pressed) {
+  const names = ['A','B','X','Y','LB','RB','LT','RT','Back','Start','LS','RS'];
+  const el = ['btn-a','btn-b','btn-x','btn-y','lt','rt',null,null,null,null,'stick-l','stick-r'][index];
+  if (el && document.getElementById(el)) {
+    document.getElementById(el).classList.toggle('active', pressed);
+  }
+  if (pressed) log('按下', names[index] || `按钮${index}`, index);
+  else log('松开', names[index] || `按钮${index}`, index);
+  buttonStates[index] = pressed;
+  updateLEDs();
+  document.getElementById('statusDot').className = 'status-dot input';
+  setTimeout(() => document.getElementById('statusDot').className = device ? 'status-dot connected' : 'status-dot', 200);
+}
+
+function setAxis(index, value) {
+  const names = ['LX','LY','RX','RY'];
+  axes[index] = value;
+  if (Math.abs(value) > 0.1) {
+    log('摇杆', names[index], value.toFixed(2));
+    const stickEl = index < 2 ? 'stick-l' : 'stick-r';
+    const stick = document.getElementById(stickEl);
+    const dot = document.getElementById(index < 2 ? 'dot-l' : 'dot-r');
+    const ox = index % 2 === 0 ? 0 : (index === 1 ? 1 : 0);
+    const oy = index % 2 === 1 ? 0 : (index === 2 ? 1 : 0);
+    if (stickEl === 'stick-l' || stickEl === 'stick-r') {
+      const x = Math.round(value * 20);
+      const y = Math.round((index < 2 ? -axes[1] : -axes[3]) * 20);
+      dot.style.transform = `translate(${x}px, ${y}px)`;
+      stick.classList.add('active');
+    }
+  } else {
+    const stickEl = index < 2 ? 'stick-l' : 'stick-r';
+    const dot = document.getElementById(index < 2 ? 'dot-l' : 'dot-r');
+    if (dot) dot.style.transform = '';
+    document.getElementById(stickEl).classList.remove('active');
+  }
+  document.getElementById('statusDot').className = 'status-dot input';
+  setTimeout(() => document.getElementById('statusDot').className = device ? 'status-dot connected' : 'status-dot', 200);
+}
+
+async function connectDevice() {
+  const btn = document.getElementById('connectBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ 连接中...';
+  try {
+    device = await navigator.hid.requestDevice({
+      filters: [{ usagePage: 0x01, usage: 0x05 }]
+    });
+    await device.open();
+    device.addEventListener('inputreport', (e) => {
+      const data = new Uint8Array(e.data.buffer);
+      // Standard gamepad report format
+      if (data.length >= 4) {
+        const btnByte = data[4] || 0;
+        for (let i = 0; i < 16; i++) {
+          setBtn(i, !!(btnByte & (1 << i)));
+        }
+      }
+      if (data.length >= 8) {
+        setAxis(0, (data[6] - 128) / 128);
+        setAxis(1, (data[7] - 128) / 128);
+      }
+    });
+    document.getElementById('statusDot').className = 'status-dot connected';
+    document.getElementById('statusText').textContent = '已连接';
+    log('系统', '设备连接成功', device.productName || 'HID设备');
+    btn.textContent = '✅ 已连接';
+  } catch (e) {
+    log('错误', '连接失败: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = '🔌 重试连接';
+  }
+}
+
+// Keyboard fallback
+const activeKeys = new Set();
+document.addEventListener('keydown', (e) => {
+  if (activeKeys.has(e.key)) return;
+  activeKeys.add(e.key);
+  
+  if (keyMap[e.key] !== undefined) {
+    setBtn(keyMap[e.key], true);
+    document.getElementById('statusDot').className = 'status-dot input';
+  }
+  if (keyAxes[e.key]) {
+    const [axis, val, stick] = keyAxes[e.key];
+    setAxis(axis, val);
+    document.getElementById('stick-l').classList.toggle('active', stick === 1);
+  }
+});
+
+document.addEventListener('keyup', (e) => {
+  activeKeys.delete(e.key);
+  if (keyMap[e.key] !== undefined) setBtn(keyMap[e.key], false);
+  if (keyAxes[e.key]) {
+    const [axis, val] = keyAxes[e.key];
+    setAxis(axis, 0);
+    document.getElementById('stick-l').classList.remove('active');
+  }
+});
+
+// Demo: simulate button presses on the controller visual
+function simulateBtn(id) {
+  const el = document.getElementById(id);
+  el.classList.add('active');
+  setTimeout(() => el.classList.remove('active'), 150);
+}
+
+// Click on controller buttons to simulate
+document.querySelectorAll('.dpad-btn, .center-btn, .abxy-btn, .trigger, .stick').forEach(el => {
+  el.addEventListener('click', () => simulateBtn(el.id));
+  el.addEventListener('mousedown', () => el.classList.add('active'));
+  el.addEventListener('mouseup', () => el.classList.remove('active'));
+  el.addEventListener('mouseleave', () => el.classList.remove('active'));
+});
+
+log('系统', '页面加载完成，使用键盘或连接 HID 设备');
+</script>
+
+</body>
+</html>

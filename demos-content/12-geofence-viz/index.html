@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>地理围栏可视化</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #0a0e17;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      padding: 20px 28px;
+      background: linear-gradient(135deg, #1a1f35 0%, #0d1320 100%);
+      border-bottom: 1px solid rgba(99,179,237,0.15);
+    }
+    header h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      background: linear-gradient(90deg, #63b3ed, #9f7aea);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    header p { font-size: 0.85rem; color: #718096; margin-top: 4px; }
+    .main { display: flex; flex: 1; overflow: hidden; }
+    .sidebar {
+      width: 320px;
+      background: #111827;
+      border-right: 1px solid rgba(99,179,237,0.1);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .sidebar-tabs {
+      display: flex;
+      border-bottom: 1px solid rgba(99,179,237,0.1);
+    }
+    .sidebar-tab {
+      flex: 1; padding: 12px 8px; text-align: center;
+      font-size: 0.8rem; cursor: pointer; color: #718096;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+    }
+    .sidebar-tab.active {
+      color: #63b3ed; border-bottom-color: #63b3ed;
+      background: rgba(99,179,237,0.05);
+    }
+    .sidebar-content { flex: 1; overflow-y: auto; padding: 16px; }
+    .sidebar-content::-webkit-scrollbar { width: 4px; }
+    .sidebar-content::-webkit-scrollbar-thumb { background: #2d3748; border-radius: 2px; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+    .section-title {
+      font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em;
+      color: #4a5568; margin: 16px 0 8px; font-weight: 600;
+    }
+    .fence-list { display: flex; flex-direction: column; gap: 8px; }
+    .fence-item {
+      background: #1a202c; border: 1px solid rgba(99,179,237,0.1);
+      border-radius: 8px; padding: 12px; cursor: pointer;
+      transition: all 0.2s; position: relative;
+    }
+    .fence-item:hover { border-color: rgba(99,179,237,0.3); background: #1e2433; }
+    .fence-item.selected { border-color: #63b3ed; background: rgba(99,179,237,0.08); }
+    .fence-item-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .fence-item-name { font-weight: 600; font-size: 0.9rem; }
+    .fence-item-color {
+      width: 14px; height: 14px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.2);
+    }
+    .fence-item-meta { font-size: 0.75rem; color: #718096; }
+    .fence-item-points { font-size: 0.7rem; color: #4a5568; margin-top: 4px; }
+    .fence-status {
+      display: inline-block; padding: 2px 8px; border-radius: 12px;
+      font-size: 0.7rem; font-weight: 600; margin-left: 6px;
+    }
+    .fence-status.inside { background: rgba(72,187,120,0.2); color: #48bb78; }
+    .fence-status.outside { background: rgba(229,62,62,0.2); color: #fc8181; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 16px; border-radius: 6px; border: none; cursor: pointer;
+      font-size: 0.8rem; font-weight: 600; transition: all 0.2s;
+    }
+    .btn-primary { background: linear-gradient(135deg, #4299e1, #3182ce); color: white; }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(66,153,225,0.3); }
+    .btn-secondary { background: #1a202c; color: #a0aec0; border: 1px solid rgba(99,179,237,0.2); }
+    .btn-secondary:hover { border-color: rgba(99,179,237,0.5); color: #e2e8f0; }
+    .btn-danger { background: rgba(229,62,62,0.15); color: #fc8181; border: 1px solid rgba(229,62,62,0.2); }
+    .btn-danger:hover { background: rgba(229,62,62,0.25); }
+    .btn-full { width: 100%; justify-content: center; margin-top: 8px; }
+    .add-fence-btn { margin: 16px 0 8px; }
+    .tool-panel { display: flex; flex-direction: column; gap: 12px; }
+    .tool-btn {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px; border-radius: 8px; background: #1a202c;
+      border: 1px solid rgba(99,179,237,0.1); cursor: pointer;
+      color: #a0aec0; transition: all 0.2s; text-align: left;
+    }
+    .tool-btn:hover { border-color: rgba(99,179,237,0.3); color: #e2e8f0; }
+    .tool-btn.active { border-color: #63b3ed; background: rgba(99,179,237,0.08); color: #63b3ed; }
+    .tool-icon { font-size: 1.2rem; }
+    .tool-label { font-size: 0.85rem; }
+    .tool-desc { font-size: 0.7rem; color: #4a5568; margin-top: 2px; }
+    .status-bar {
+      padding: 10px 16px; background: #0d1320;
+      border-top: 1px solid rgba(99,179,237,0.1);
+      font-size: 0.75rem; color: #718096;
+      display: flex; gap: 20px; align-items: center;
+    }
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #48bb78; margin-right: 6px;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .test-point-panel { display: none; }
+    .test-point-panel.active { display: block; }
+    .point-marker {
+      width: 20px; height: 20px; border-radius: 50%;
+      background: #f6ad55; border: 3px solid white;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    .panel-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 12px; color: #e2e8f0; }
+    .input-group { margin-bottom: 12px; }
+    .input-group label { display: block; font-size: 0.75rem; color: #718096; margin-bottom: 4px; }
+    .input-group input {
+      width: 100%; padding: 8px 12px; border-radius: 6px;
+      background: #1a202c; border: 1px solid rgba(99,179,237,0.15);
+      color: #e2e8f0; font-size: 0.85rem; outline: none;
+    }
+    .input-group input:focus { border-color: #4299e1; }
+    .coord-display {
+      background: #0d1320; border-radius: 6px; padding: 10px 12px;
+      font-family: 'Courier New', monospace; font-size: 0.78rem;
+      color: #63b3ed; margin-top: 8px;
+    }
+    .preset-fences { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+    .preset-btn {
+      padding: 6px 10px; border-radius: 4px; background: #1a202c;
+      border: 1px solid rgba(99,179,237,0.1); color: #a0aec0;
+      cursor: pointer; font-size: 0.75rem; text-align: left; transition: all 0.2s;
+    }
+    .preset-btn:hover { border-color: rgba(99,179,237,0.3); background: #1e2433; }
+    #map { flex: 1; }
+    .leaflet-container { background: #0a0e17; }
+    .draw-hint {
+      position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.8); color: #63b3ed; padding: 8px 16px;
+      border-radius: 20px; font-size: 0.8rem; z-index: 1000;
+      border: 1px solid rgba(99,179,237,0.3);
+      pointer-events: none;
+    }
+    .fence-info-popup {
+      background: #1a202c; color: #e2e8f0; padding: 12px;
+      border-radius: 8px; min-width: 180px;
+    }
+    .fence-info-popup h4 { margin-bottom: 6px; color: #63b3ed; }
+    .fence-info-popup p { font-size: 0.78rem; color: #a0aec0; }
+    .empty-state {
+      text-align: center; padding: 32px 16px; color: #4a5568;
+    }
+    .empty-state-icon { font-size: 2.5rem; margin-bottom: 8px; opacity: 0.4; }
+    .empty-state p { font-size: 0.82rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🗺️ 地理围栏可视化</h1>
+    <p>在地图上绘制区域，实时判断任意点是否在围栏范围内</p>
+  </header>
+  <div class="main">
+    <div class="sidebar">
+      <div class="sidebar-tabs">
+        <div class="sidebar-tab active" data-tab="fences">围栏列表</div>
+        <div class="sidebar-tab" data-tab="tools">绘制工具</div>
+        <div class="sidebar-tab" data-tab="test">测试点</div>
+      </div>
+      <div class="sidebar-content">
+        <!-- Fences Tab -->
+        <div class="tab-panel active" id="fences-tab">
+          <div class="section-title">已创建围栏</div>
+          <div class="fence-list" id="fenceList">
+            <div class="empty-state">
+              <div class="empty-state-icon">📍</div>
+              <p>还没有围栏<br/>使用左侧「绘制工具」创建一个</p>
+            </div>
+          </div>
+          <div class="add-fence-btn">
+            <button class="btn btn-primary btn-full" onclick="activateDrawTool('polygon')">
+              ➕ 绘制多边形围栏
+            </button>
+          </div>
+          <div class="section-title" style="margin-top:12px;">预设区域</div>
+          <div class="preset-fences">
+            <button class="preset-btn" onclick="loadPreset('beijing')">🏛️ 北京市区</button>
+            <button class="preset-btn" onclick="loadPreset('shanghai')">🌆 上海市区</button>
+            <button class="preset-btn" onclick="loadPreset('custom')">⭐ 自定义 Demo 区域</button>
+          </div>
+        </div>
+        <!-- Tools Tab -->
+        <div class="tab-panel" id="tools-tab">
+          <div class="panel-title">绘制模式</div>
+          <div class="tool-panel">
+            <div class="tool-btn" onclick="activateDrawTool('polygon')" id="tool-polygon">
+              <span class="tool-icon">⬡</span>
+              <div>
+                <div class="tool-label">多边形</div>
+                <div class="tool-desc">点击地图绘制多边形区域</div>
+              </div>
+            </div>
+            <div class="tool-btn" onclick="activateDrawTool('circle')" id="tool-circle">
+              <span class="tool-icon">⭕</span>
+              <div>
+                <div class="tool-label">圆形</div>
+                <div class="tool-desc">点击圆心，拖动设置半径</div>
+              </div>
+            </div>
+            <div class="tool-btn" onclick="activateDrawTool('rectangle')" id="tool-rectangle">
+              <span class="tool-icon">▢</span>
+              <div>
+                <div class="tool-label">矩形</div>
+                <div class="tool-desc">拖动绘制矩形区域</div>
+              </div>
+            </div>
+          </div>
+          <div class="panel-title" style="margin-top:20px;">操作</div>
+          <button class="btn btn-secondary btn-full" onclick="clearAllFences()">🗑️ 清除所有围栏</button>
+          <button class="btn btn-secondary btn-full" onclick="clearTestPoints()">🗑️ 清除测试点</button>
+          <button class="btn btn-danger btn-full" onclick="resetDemo()">🔄 重置演示</button>
+        </div>
+        <!-- Test Tab -->
+        <div class="tab-panel" id="test-tab">
+          <div class="panel-title">测试点检测</div>
+          <div class="input-group">
+            <label>经度 (Longitude)</label>
+            <input type="number" id="testLng" placeholder="例如: 116.397128" step="0.0001">
+          </div>
+          <div class="input-group">
+            <label>纬度 (Latitude)</label>
+            <input type="number" id="testLat" placeholder="例如: 39.916527" step="0.0001">
+          </div>
+          <button class="btn btn-primary btn-full" onclick="addTestPoint()">📍 添加测试点</button>
+          <div class="coord-display" id="coordDisplay">
+            点击地图或输入坐标添加测试点
+          </div>
+          <div class="section-title" style="margin-top:16px;">快速测试</div>
+          <button class="btn btn-secondary btn-full" onclick="testRandomPoints()">🎲 生成随机测试点</button>
+          <div id="testResults" style="margin-top:16px;"></div>
+        </div>
+      </div>
+    </div>
+    <div id="map"></div>
+  </div>
+  <div class="status-bar">
+    <span><span class="status-dot"></span>实时监测中</span>
+    <span id="fenceCount">围栏: 0 个</span>
+    <span id="testPointCount">测试点: 0 个</span>
+    <span id="insideCount">范围内: 0</span>
+  </div>
+
+  <script>
+    // State
+    let fences = [];
+    let testPoints = [];
+    let fenceIdCounter = 1;
+    let isDrawMode = false;
+    let drawType = null;
+    let tempLayer = null;
+    let drawStart = null;
+
+    const COLORS = ['#63b3ed','#9f7aea','#48bb78','#f6ad55','#fc8181','#76e4f7','#d69e2e','#ed64a6'];
+    const FENCE_STORAGE_KEY = 'geofence_demo_data';
+
+    // Map
+    const map = L.map('map', {
+      center: [39.9042, 116.4074],
+      zoom: 6,
+      zoomControl: true
+    });
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      attribution: '© OpenStreetMap, © CARTO',
+      subdomains: 'abcd', maxZoom: 19
+    }).addTo(map);
+
+    // Load saved data
+    function loadSavedData() {
+      try {
+        const saved = localStorage.getItem(FENCE_STORAGE_KEY);
+        if (saved) {
+          const data = JSON.parse(saved);
+          fences = data.fences || [];
+          testPoints = data.testPoints || [];
+          fenceIdCounter = data.fenceIdCounter || 1;
+          fences.forEach(f => renderFence(f));
+          testPoints.forEach(p => renderTestPoint(p));
+          updateUI();
+        }
+      } catch(e) { console.warn('Failed to load saved data:', e); }
+    }
+
+    function saveData() {
+      try {
+        localStorage.setItem(FENCE_STORAGE_KEY, JSON.stringify({
+          fences, testPoints, fenceIdCounter
+        }));
+      } catch(e) {}
+    }
+
+    // Preset data
+    const PRESETS = {
+      beijing: {
+        name: '北京市区',
+        color: '#63b3ed',
+        type: 'polygon',
+        coords: [[39.6,115.7],[39.6,117.4],[40.5,117.4],[40.5,115.7]]
+      },
+      shanghai: {
+        name: '上海市区',
+        color: '#48bb78',
+        type: 'polygon',
+        coords: [[30.7,120.8],[30.7,122.0],[31.5,122.0],[31.5,120.8]]
+      },
+      custom: {
+        name: '演示区域',
+        color: '#9f7aea',
+        type: 'polygon',
+        coords: [[35.0,112.0],[35.0,120.0],[38.0,120.0],[38.0,112.0]]
+      }
+    };
+
+    function loadPreset(name) {
+      const preset = PRESETS[name];
+      if (!preset) return;
+      if (fences.some(f => f.name === preset.name)) {
+        map.fitBounds(preset.coords.map(c => [c[0], c[1]]));
+        return;
+      }
+      createFence(preset.name, preset.color, preset.type, preset.coords);
+    }
+
+    // Fence creation
+    function createFence(name, color, type, coords) {
+      const fence = {
+        id: fenceIdCounter++,
+        name: name || `围栏 ${fenceIdCounter - 1}`,
+        color: color || COLORS[fences.length % COLORS.length],
+        type: type,
+        coords: coords,
+        radius: type === 'circle' ? (coords[1] || 50000) : null,
+        area: calculateArea(coords)
+      };
+      fences.push(fence);
+      renderFence(fence);
+      updateUI();
+      saveData();
+      checkAllPoints();
+      return fence;
+    }
+
+    function renderFence(fence) {
+      let layer;
+      if (fence.type === 'polygon' || fence.type === 'rectangle') {
+        layer = L.polygon(fence.coords.map(c => [c[0], c[1]]), {
+          color: fence.color, fillColor: fence.color, fillOpacity: 0.15,
+          weight: 2, dashArray: '5,5'
+        });
+      } else if (fence.type === 'circle') {
+        layer = L.circle([fence.coords[0][0], fence.coords[0][1]], {
+          radius: fence.radius, color: fence.color, fillColor: fence.color,
+          fillOpacity: 0.15, weight: 2, dashArray: '5,5'
+        });
+      }
+      layer.fenceId = fence.id;
+      layer.addTo(map).bindPopup(`
+        <div class="fence-info-popup">
+          <h4>${fence.name}</h4>
+          <p>类型: ${fence.type === 'polygon' ? '多边形' : fence.type === 'circle' ? '圆形' : '矩形'}</p>
+          <p>面积: ${(fence.area / 1000000).toFixed(2)} km²</p>
+          <p>顶点数: ${fence.coords.length}</p>
+        </div>
+      `);
+      fence.layer = layer;
+    }
+
+    function calculateArea(coords) {
+      if (!coords || coords.length < 3) return 0;
+      const R = 6371000;
+      let area = 0;
+      for (let i = 0; i < coords.length; i++) {
+        const j = (i + 1) % coords.length;
+        const [lat1, lng1] = coords[i];
+        const [lat2, lng2] = coords[j];
+        area += toRad(lng2 - lng1) * (2 + Math.sin(toRad(lat1)) + Math.sin(toRad(lat2)));
+      }
+      area = Math.abs(area * R * R / 2);
+      return area;
+    }
+
+    function toRad(deg) { return deg * Math.PI / 180; }
+
+    // Test points
+    function addTestPoint(lng, lat) {
+      if (lng === undefined || lat === undefined) {
+        lng = parseFloat(document.getElementById('testLng').value);
+        lat = parseFloat(document.getElementById('testLat').value);
+        if (isNaN(lng) || isNaN(lat)) return;
+      }
+      const point = { id: Date.now(), lng, lat, inside: [] };
+      testPoints.push(point);
+      renderTestPoint(point);
+      updateUI();
+      saveData();
+      checkPoint(point);
+    }
+
+    function renderTestPoint(point) {
+      const marker = L.divIcon({
+        className: '', html: `<div class="point-marker" style="background:${point.inside.length ? '#48bb78' : '#f6ad55'}"></div>`,
+        iconSize: [20, 20], iconAnchor: [10, 10]
+      });
+      point.layer = L.marker([point.lat, point.lng], { icon: marker }).addTo(map)
+        .bindPopup(`<div class="fence-info-popup"><h4>测试点</h4><p>经度: ${point.lng.toFixed(6)}</p><p>纬度: ${point.lat.toFixed(6)}</p>${point.inside.length ? `<p style="color:#48bb78">在 ${point.inside.length} 个围栏内</p>` : ''}</div>`);
+    }
+
+    // Geometry checking
+    function checkPoint(point) {
+      point.inside = [];
+      fences.forEach(fence => {
+        if (isPointInFence(point.lng, point.lat, fence)) {
+          point.inside.push(fence.id);
+        }
+      });
+      if (point.layer) {
+        const color = point.inside.length ? '#48bb78' : '#f6ad55';
+        point.layer.setIcon(L.divIcon({
+          className: '', html: `<div class="point-marker" style="background:${color}"></div>`,
+          iconSize: [20, 20], iconAnchor: [10, 10]
+        }));
+        point.layer.setPopupContent(`
+          <div class="fence-info-popup"><h4>测试点</h4>
+          <p>经度: ${point.lng.toFixed(6)}</p>
+          <p>纬度: ${point.lat.toFixed(6)}</p>
+          ${point.inside.length ? `<p style="color:#48bb78">在 ${point.inside.length} 个围栏内 ✓</p>` : '<p style="color:#fc8181">不在任何围栏内</p>'}
+          ${point.inside.length ? `<p style="font-size:0.7rem;color:#a0aec0">${point.inside.map(id => fences.find(f=>f.id===id)?.name).join(', ')}</p>` : ''}
+          </div>
+        `);
+      }
+      updateUI();
+    }
+
+    function checkAllPoints() {
+      testPoints.forEach(p => checkPoint(p));
+    }
+
+    function isPointInFence(lng, lat, fence) {
+      if (fence.type === 'circle') {
+        const [cLat, cLng] = fence.coords[0];
+        const d = getDistance(lat, lng, cLat, cLng);
+        return d <= fence.radius;
+      }
+      return isPointInPolygon(lng, lat, fence.coords);
+    }
+
+    function isPointInPolygon(x, y, polygon) {
+      let inside = false;
+      for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+        const [yi, xi] = polygon[i];
+        const [yj, xj] = polygon[j];
+        const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+      }
+      return inside;
+    }
+
+    function getDistance(lat1, lng1, lat2, lng2) {
+      const R = 6371000;
+      const dLat = toRad(lat2 - lat1);
+      const dLng = toRad(lng2 - lng1);
+      const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng/2)**2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+
+    // Drawing tools
+    function activateDrawTool(type) {
+      if (isDrawMode && drawType === type) {
+        deactivateDrawTool();
+        return;
+      }
+      isDrawMode = true; drawType = type;
+      document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+      const btn = document.getElementById('tool-' + type);
+      if (btn) btn.classList.add('active');
+      map.getContainer().style.cursor = 'crosshair';
+    }
+
+    function deactivateDrawTool() {
+      isDrawMode = false; drawType = null;
+      document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+      map.getContainer().style.cursor = '';
+      if (tempLayer) { map.removeLayer(tempLayer); tempLayer = null; }
+    }
+
+    let drawPoints = [];
+
+    map.on('click', function(e) {
+      if (!isDrawMode) {
+        document.getElementById('testLng').value = e.latlng.lng.toFixed(6);
+        document.getElementById('testLat').value = e.latlng.lat.toFixed(6);
+        document.getElementById('coordDisplay').textContent = `📍 ${e.latlng.lat.toFixed(6)}, ${e.latlng.lng.toFixed(6)}`;
+        return;
+      }
+      if (drawType === 'circle') {
+        if (!drawStart) {
+          drawStart = e.latlng;
+          map.getContainer().style.cursor = 'pointer';
+        } else {
+          const radius = getDistance(drawStart.lat, drawStart.lng, e.latlng.lat, e.latlng.lng);
+          createFence(`圆形围栏 ${fenceIdCounter}`, COLORS[fences.length % COLORS.length], 'circle', [[drawStart.lat, drawStart.lng]], radius);
+          drawStart = null;
+          map.getContainer().style.cursor = 'crosshair';
+          deactivateDrawTool();
+        }
+      } else if (drawType === 'polygon') {
+        drawPoints.push([e.latlng.lat, e.latlng.lng]);
+        if (tempLayer) map.removeLayer(tempLayer);
+        if (drawPoints.length > 1) {
+          tempLayer = L.polygon(drawPoints.map(p => [p[0], p[1]]), {
+            color: '#63b3ed', fillColor: '#63b3ed', fillOpacity: 0.1, weight: 2, dashArray: '5,5'
+          }).addTo(map);
+        }
+      } else if (drawType === 'rectangle') {
+        if (!drawStart) {
+          drawStart = e.latlng;
+        } else {
+          const bounds = L.latLngBounds(drawStart, e.latlng);
+          createFence(`矩形围栏 ${fenceIdCounter}`, COLORS[fences.length % COLORS.length], 'rectangle', [
+            [bounds.getSouth(), bounds.getWest()],
+            [bounds.getSouth(), bounds.getEast()],
+            [bounds.getNorth(), bounds.getEast()],
+            [bounds.getNorth(), bounds.getWest()]
+          ]);
+          drawStart = null;
+          deactivateDrawTool();
+        }
+      }
+    });
+
+    map.on('dblclick', function(e) {
+      if (isDrawMode && drawType === 'polygon' && drawPoints.length >= 3) {
+        createFence(`多边形围栏 ${fenceIdCounter}`, COLORS[fences.length % COLORS.length], 'polygon', [...drawPoints]);
+        drawPoints = [];
+        if (tempLayer) { map.removeLayer(tempLayer); tempLayer = null; }
+        deactivateDrawTool();
+      }
+    });
+
+    // UI
+    function updateUI() {
+      document.getElementById('fenceCount').textContent = `围栏: ${fences.length} 个`;
+      document.getElementById('testPointCount').textContent = `测试点: ${testPoints.length} 个`;
+      document.getElementById('insideCount').textContent = `范围内: ${testPoints.filter(p => p.inside.length > 0).length}`;
+      renderFenceList();
+    }
+
+    function renderFenceList() {
+      const list = document.getElementById('fenceList');
+      if (fences.length === 0) {
+        list.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📍</div><p>还没有围栏<br/>使用左侧「绘制工具」创建一个</p></div>`;
+        return;
+      }
+      list.innerHTML = fences.map(f => `
+        <div class="fence-item" onclick="focusFence(${f.id})">
+          <div class="fence-item-header">
+            <span class="fence-item-name">${f.name}</span>
+            <span class="fence-item-color" style="background:${f.color}"></span>
+          </div>
+          <div class="fence-item-meta">
+            ${f.type === 'polygon' ? '多边形' : f.type === 'circle' ? '圆形' : '矩形'}
+            ${f.type !== 'circle' ? `· ${(f.area/1000000).toFixed(2)} km²` : `· 半径 ${(f.radius/1000).toFixed(1)} km`}
+            <span class="fence-status ${testPoints.some(p=>p.inside.includes(f.id))?'inside':'outside'}">
+              ${testPoints.some(p=>p.inside.includes(f.id))?'有点在内':'无点在内'}
+            </span>
+          </div>
+          <div class="fence-item-points">${testPoints.filter(p=>p.inside.includes(f.id)).length} 个测试点在内部</div>
+        </div>
+      `).join('');
+    }
+
+    function focusFence(id) {
+      const fence = fences.find(f => f.id === id);
+      if (!fence || !fence.layer) return;
+      map.fitBounds(fence.layer.getBounds(), { padding: [50, 50] });
+    }
+
+    function testRandomPoints() {
+      const bounds = map.getBounds();
+      for (let i = 0; i < 5; i++) {
+        const lat = bounds.getSouth() + Math.random() * (bounds.getNorth() - bounds.getSouth());
+        const lng = bounds.getWest() + Math.random() * (bounds.getEast() - bounds.getWest());
+        addTestPoint(lng, lat);
+      }
+    }
+
+    function clearAllFences() {
+      fences.forEach(f => { if (f.layer) map.removeLayer(f.layer); });
+      fences = [];
+      updateUI(); saveData();
+    }
+
+    function clearTestPoints() {
+      testPoints.forEach(p => { if (p.layer) map.removeLayer(p.layer); });
+      testPoints = [];
+      updateUI(); saveData();
+    }
+
+    function resetDemo() {
+      clearAllFences(); clearTestPoints();
+      fenceIdCounter = 1;
+      map.setView([39.9042, 116.4074], 6);
+    }
+
+    // Tab switching
+    document.querySelectorAll('.sidebar-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById(tab.dataset.tab + '-tab').classList.add('active');
+      });
+    });
+
+    // Init
+    loadSavedData();
+    if (fences.length === 0) {
+      loadPreset('custom');
+    } else {
+      updateUI();
+    }
+  </script>
+</body>
+</html>

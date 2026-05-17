@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cron 表达式可视化</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0a0e1a;--bg2:#111827;--bg3:#1e293b;--border:rgba(148,163,184,0.1)
+  --text:#e2e8f0;--muted:#94a3b8;--accent:#6366f1;--accent2:#8b5cf6
+  --success:#10b981;--warning:#f59e0b;--danger:#ef4444;--info:#0ea5e9
+}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;min-height:100vh;padding:2rem}
+.title{text-align:center;margin-bottom:2rem}
+.title h1{font-size:2rem;font-weight:700;background:linear-gradient(135deg,#6366f1,#8b5cf6);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:.5rem}
+.title p{color:var(--muted);font-size:.9rem}
+.container{max-width:960px;margin:0 auto}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:1.5rem;margin-bottom:1.5rem}
+.card-title{font-size:.75rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:1rem;display:flex;align-items:center;gap:.5rem}
+.card-title .dot{width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.expr-row{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem}
+.field-group{flex:1;min-width:80px;display:flex;flex-direction:column;gap:.25rem}
+.field-group label{font-size:.65rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.field-group input{background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:.85rem;padding:.4rem .6rem;text-align:center;width:100%;outline:none;transition:border-color .2s}
+.field-group input:focus{border-color:var(--accent)}
+.field-group span{font-size:.6rem;color:var(--muted);text-align:center}
+.result-bar{background:var(--bg3);border-radius:12px;padding:1rem 1.25rem;display:flex;align-items:center;gap:1rem;margin-bottom:1rem}
+.result-bar .icon{font-size:1.5rem}
+.result-bar .text{flex:1}
+.result-bar .text .human{font-size:1rem;font-weight:600;color:var(--text)}
+.result-bar .text .detail{font-size:.75rem;color:var(--muted);margin-top:.2rem}
+.result-bar .badge{padding:.3rem .75rem;border-radius:99px;font-size:.7rem;font-weight:600}
+.next-dates{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:.5rem}
+.next-date-item{background:var(--bg3);border-radius:10px;padding:.75rem;text-align:center;border:1px solid var(--border)}
+.next-date-item .date{font-family:'JetBrains Mono',monospace;font-size:.75rem;color:var(--text)}
+.next-date-item .day{font-size:.65rem;color:var(--muted);margin-top:.2rem}
+.timeline{position:relative;height:60px;background:var(--bg3);border-radius:10px;overflow:hidden;margin-top:.5rem}
+.timeline-inner{position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;padding:0 1rem}
+.timeline-track{width:100%;height:4px;background:rgba(99,102,241,0.2);border-radius:2px;position:relative}
+.timeline-marks{position:absolute;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;pointer-events:none}
+.mark{position:absolute;width:2px;height:12px;background:var(--accent);border-radius:1px;transform:translateX(-50%)}
+.mark.last{background:var(--success)}
+.now-label{position:absolute;left:0;top:50%;transform:translateY(-50%);font-size:.6rem;color:var(--muted);font-family:'JetBrains Mono',monospace}
+.tabs{display:flex;gap:.25rem;background:var(--bg3);border-radius:10px;padding:.25rem;margin-bottom:1rem}
+.tab{flex:1;padding:.5rem;border-radius:8px;font-size:.75rem;font-weight:600;color:var(--muted);cursor:pointer;text-align:center;transition:all .2s;border:none;background:transparent}
+.tab.active{background:var(--accent);color:#fff}
+.presets{display:flex;flex-wrap:wrap;gap:.5rem}
+.preset-btn{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:.4rem .75rem;font-size:.7rem;font-family:'JetBrains Mono',monospace;color:var(--text);cursor:pointer;transition:all .2s}
+.preset-btn:hover{border-color:var(--accent);color:var(--accent)}
+.code-display{background:#000;border:1px solid var(--border);border-radius:10px;padding:1rem;font-family:'JetBrains Mono',monospace;font-size:.85rem;color:#00ff9f;line-height:1.8}
+.copy-btn{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:.4rem .75rem;font-size:.7rem;color:var(--muted);cursor:pointer;margin-left:auto;display:flex;align-items:center;gap:.3rem;transition:all .2s}
+.copy-btn:hover{border-color:var(--accent);color:var(--accent)}
+.vis{padding:.5rem;display:none}
+.vis.active{display:block}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+@media(max-width:640px){
+  .expr-row{gap:.25rem}
+  .field-group{min-width:60px}
+  .field-group input{font-size:.7rem;padding:.3rem}
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="title">
+    <h1>⏰ Cron 表达式可视化</h1>
+    <p>交互式 Cron 表达式生成器 — 实时解析、下次执行时间、日历视图</p>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="dot"></span>快速预设</div>
+    <div class="presets" id="presets"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="dot"></span>表达式输入</div>
+    <div class="expr-row">
+      <div class="field-group">
+        <label>分钟</label>
+        <input id="f-min" value="*" maxlength="5">
+        <span>0-59</span>
+      </div>
+      <div class="field-group">
+        <label>小时</label>
+        <input id="f-hr" value="*" maxlength="5">
+        <span>0-23</span>
+      </div>
+      <div class="field-group">
+        <label>日期</label>
+        <input id="f-dom" value="*" maxlength="5">
+        <span>1-31</span>
+      </div>
+      <div class="field-group">
+        <label>月份</label>
+        <input id="f-mon" value="*" maxlength="5">
+        <span>1-12</span>
+      </div>
+      <div class="field-group">
+        <label>星期</label>
+        <input id="f-dow" value="*" maxlength="5">
+        <span>0-6</span>
+      </div>
+    </div>
+    <div class="code-display" id="code-display">* * * * *</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="dot"></span>解析结果</div>
+    <div class="result-bar" id="result-bar">
+      <span class="icon">⏰</span>
+      <div class="text">
+        <div class="human" id="human-desc">每分钟执行一次</div>
+        <div class="detail" id="detail-desc">Cron: * * * * *</div>
+      </div>
+      <span class="badge" id="result-badge" style="background:rgba(99,102,241,0.15);color:#6366f1">活跃</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="dot"></span>下次执行时间</div>
+    <div class="tabs">
+      <button class="tab active" data-range="1h">未来1小时</button>
+      <button class="tab" data-range="24h">未来24小时</button>
+      <button class="tab" data-range="7d">未来7天</button>
+      <button class="tab" data-range="30d">未来30天</button>
+    </div>
+    <div id="next-dates" class="next-dates"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="dot"></span>时间轴预览</div>
+    <div id="timeline-label" style="font-size:.7rem;color:var(--muted);margin-bottom:.5rem"></div>
+    <div class="timeline">
+      <div class="now-label" id="now-label">NOW</div>
+      <div class="timeline-track">
+        <div class="timeline-marks" id="timeline-marks"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span class="dot"></span>日历视图</div>
+    <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem">
+      <button id="cal-prev" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);width:32px;height:32px;cursor:pointer;font-size:1rem">‹</button>
+      <span id="cal-title" style="font-weight:600;font-size:.9rem"></span>
+      <button id="cal-next" style="background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);width:32px;height:32px;cursor:pointer;font-size:1rem">›</button>
+    </div>
+    <div id="calendar" style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px"></div>
+  </div>
+</div>
+
+<script>
+const PRESETS = [
+  {label:'* * * * *',title:'每分钟'},
+  {label:'0 * * * *',title:'每小时整点'},
+  {label:'0 9 * * *',title:'每天上午9点'},
+  {label:'0 9 * * 1',title:'每周一上午9点'},
+  {label:'0 9 1 * *',title:'每月1号上午9点'},
+  {label:'*/5 * * * *',title:'每5分钟'},
+  {label:'*/15 * * * *',title:'每15分钟'},
+  {label:'30 23 * * *',title:'每天23:30'},
+  {label:'0 0 * * 0',title:'每周日午夜'},
+  {label:'0 6-18 * * *',title:'每小时(6-18点)'},
+  {label:'0 9 * 1,4,7,10 *',title:'每季度第一天9点'},
+  {label:'*/2 * * * *',title:'每2分钟'},
+];
+
+// Parse cron field
+function parseField(field, min, max) {
+  if (field === '*') return Array.from({length: max - min + 1}, (_, i) => min + i);
+  const vals = new Set();
+  const parts = field.split(',');
+  for (const p of parts) {
+    if (p.includes('/')) {
+      const [range, step] = p.split('/');
+      const stepN = parseInt(step);
+      let start = min, end = max;
+      if (range !== '*') {
+        if (range.includes('-')) {
+          [start, end] = range.split('-').map(Number);
+        } else {
+          start = parseInt(range);
+        }
+      }
+      for (let v = start; v <= end; v += stepN) vals.add(v);
+    } else if (p.includes('-')) {
+      const [s, e] = p.split('-').map(Number);
+      for (let v = s; v <= e; v++) vals.add(v);
+    } else {
+      vals.add(parseInt(p));
+    }
+  }
+  return [...vals].sort((a,b) => a - b);
+}
+
+function getMatches(expr, start, end, step = 60000) {
+  const [minF, hrF, domF, monF, dowF] = expr.trim().split(/\s+/);
+  const mins = parseField(minF, 0, 59);
+  const hrs = parseField(hrF, 0, 23);
+  const doms = parseField(domF, 1, 31);
+  const mons = parseField(monF, 1, 12);
+  const dows = parseField(dowF, 0, 6);
+  const matches = [];
+  let t = new Date(start);
+  t.setSeconds(0, 0);
+  const endT = new Date(end);
+  const maxIter = 1e6, maxMatches = 500;
+  let iter = 0;
+  while (t <= endT && matches.length < maxMatches && iter++ < maxIter) {
+    const dow = t.getDay();
+    const dom = t.getDate();
+    const mon = t.getMonth() + 1;
+    const hr = t.getHours();
+    const min = t.getMinutes();
+    if (mins.includes(min) && hrs.includes(hr) && mons.includes(mon) &&
+        (domF === '*' ? true : doms.includes(dom)) &&
+        (dowF === '*' ? true : dows.includes(dow))) {
+      matches.push(new Date(t));
+    }
+    t = new Date(t.getTime() + step);
+  }
+  return matches;
+}
+
+function humanDesc(expr) {
+  const parts = expr.trim().split(/\s+/);
+  const [min, hr, dom, mon, dow] = parts;
+  const minNames = {0:'零点',15:'15分',30:'30分',45:'45分'};
+  const dowNames = ['周日','周一','周二','周三','周四','周五','周六'];
+  const monNames = ['','一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'];
+  const domNames = ['','1号','2号','3号','4号','5号','6号','7号','8号','9号','10号','11号','12号','13号','14号','15号','16号','17号','18号','19号','20号','21号','22号','23号','24号','25号','26号','27号','28号','29号','30号','31号'];
+  let desc = '';
+  if (min === '*') desc = '每分钟';
+  else if (min.includes('/')) desc = `每${min.split('/')[1]}分钟`;
+  else if (min === '0') desc = '整点';
+  else desc = `${min}分`;
+  if (hr !== '*') {
+    if (hr.includes('/')) desc += `每隔${hr.split('/')[1]}小时`;
+    else if (hr.includes('-')) desc += ` ${hr.split('-')[0]}点到${hr.split('-')[1]}点`;
+    else desc += ` ${hr}点`;
+  } else if (min !== '*') desc += '每整点';
+  if (dom !== '*') desc += ` 每月${domNames[parseInt(dom)] || dom+'号'}`;
+  if (mon !== '*') {
+    const ms = mon.split(',').map(m => monNames[parseInt(m)] || m).join('、');
+    desc += ` ${ms}`;
+  }
+  if (dow !== '*') {
+    const ds = dow.split(',').map(d => dowNames[parseInt(d)] || d).join('、');
+    desc += ` ${ds}`;
+  }
+  return desc.trim();
+}
+
+function nextRun(expr) {
+  const now = new Date();
+  const matches = getMatches(expr, now, new Date(now.getTime() + 7 * 86400000), 60000);
+  return matches[0] || null;
+}
+
+function renderDates(matches) {
+  const el = document.getElementById('next-dates');
+  if (!matches.length) { el.innerHTML = '<span style="color:var(--muted);font-size:.8rem">未来30天内无执行计划</span>'; return; }
+  el.innerHTML = matches.slice(0, 12).map(m => {
+    const d = m.toLocaleString('zh-CN',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
+    const day = ['周日','周一','周二','周三','周四','周五','周六'][m.getDay()];
+    return `<div class="next-date-item"><div class="date">${d}</div><div class="day">${day}</div></div>`;
+  }).join('');
+}
+
+function renderTimeline(matches, rangeHours) {
+  const el = document.getElementById('timeline-marks');
+  const label = document.getElementById('now-label');
+  const rangeMs = rangeHours * 3600000;
+  const now = new Date();
+  const start = now.getTime();
+  const end = start + rangeMs;
+  el.innerHTML = '';
+  label.textContent = 'NOW';
+  matches.filter(m => m.getTime() >= start && m.getTime() <= end).forEach((m, i) => {
+    const pct = ((m.getTime() - start) / rangeMs * 100).toFixed(2) + '%';
+    const div = document.createElement('div');
+    div.className = 'mark' + (i === 0 ? ' last' : '');
+    div.style.left = pct;
+    el.appendChild(div);
+  });
+  document.getElementById('timeline-label').textContent = `时间轴: 未来 ${rangeHours} 小时`;
+}
+
+function renderCalendar(matches, year, month) {
+  const el = document.getElementById('calendar');
+  const title = document.getElementById('cal-title');
+  title.textContent = `${year}年${month + 1}月`;
+  const dayNames = ['日','一','二','三','四','五','六'];
+  let html = dayNames.map(d => `<div style="text-align:center;font-size:.65rem;font-weight:600;color:var(--muted);padding:.25rem">${d}</div>`).join('');
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const matchSet = new Set(matches.map(m => `${m.getFullYear()}-${m.getMonth()}-${m.getDate()}`));
+  for (let i = 0; i < firstDay; i++) html += '<div></div>';
+  for (let d = 1; d <= daysInMonth; d++) {
+    const isMatch = matchSet.has(`${year}-${month}-${d}`);
+    const isToday = new Date().getDate() === d && new Date().getMonth() === month && new Date().getFullYear() === year;
+    html += `<div style="background:${isMatch?'rgba(99,102,241,0.2)':isToday?'rgba(16,185,129,0.15)':'var(--bg3)'};border-radius:8px;padding:.5rem;text-align:center;font-size:.75rem;color:${isMatch?'#6366f1':isToday?'#10b981':'var(--text)'};font-weight:${isMatch||isToday?'600':'400'};cursor:default">${d}</div>`;
+  }
+  el.innerHTML = html;
+}
+
+function update() {
+  const expr = ['f-min','f-hr','f-dom','f-mon','f-dow'].map(id => document.getElementById(id).value).join(' ');
+  document.getElementById('code-display').textContent = expr;
+  const human = humanDesc(expr);
+  document.getElementById('human-desc').textContent = human;
+  document.getElementById('detail-desc').textContent = 'Cron: ' + expr;
+  const next = nextRun(expr);
+  const badge = document.getElementById('result-badge');
+  if (next) {
+    const diff = next - new Date();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) { badge.textContent = '即将执行'; badge.style.background='rgba(239,68,68,0.15)'; badge.style.color='#ef4444'; }
+    else if (mins < 60) { badge.textContent = `${mins}分钟后`; badge.style.background='rgba(245,158,11,0.15)'; badge.style.color='#f59e0b'; }
+    else { badge.textContent = `${Math.floor(mins/60)}小时后`; badge.style.background='rgba(16,185,129,0.15)'; badge.style.color='#10b981'; }
+  } else {
+    badge.textContent = '无计划'; badge.style.background='rgba(239,68,68,0.15)'; badge.style.color='#ef4444';
+  }
+  const now = new Date();
+  const matches24 = getMatches(expr, now, new Date(now.getTime() + 86400000 * 30), 60000);
+  renderDates(matches24);
+  const activeTab = document.querySelector('.tab.active').dataset.range;
+  const rangeMap = {'1h':1,'24h':24,'7d':168,'30d':720};
+  renderTimeline(matches24, rangeMap[activeTab]);
+  renderCalendar(matches24, now.getFullYear(), now.getMonth());
+}
+
+document.querySelectorAll('.field-group input').forEach(inp => {
+  inp.addEventListener('input', update);
+});
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    update();
+  });
+});
+
+// Presets
+const presetsEl = document.getElementById('presets');
+PRESETS.forEach(p => {
+  const btn = document.createElement('button');
+  btn.className = 'preset-btn';
+  btn.textContent = p.label + ' — ' + p.title;
+  btn.addEventListener('click', () => {
+    const parts = p.label.split(/\s+/);
+    ['f-min','f-hr','f-dom','f-mon','f-dow'].forEach((id, i) => {
+      document.getElementById(id).value = parts[i] || '*';
+    });
+    update();
+  });
+  presetsEl.appendChild(btn);
+});
+
+// Calendar nav
+let calYear, calMonth;
+function initCal() {
+  const now = new Date();
+  calYear = now.getFullYear();
+  calMonth = now.getMonth();
+}
+document.getElementById('cal-prev').addEventListener('click', () => {
+  calMonth--;
+  if (calMonth < 0) { calMonth = 11; calYear--; }
+  const expr = ['f-min','f-hr','f-dom','f-mon','f-dow'].map(id => document.getElementById(id).value).join(' ');
+  const now = new Date();
+  const matches = getMatches(expr, now, new Date(now.getTime() + 86400000 * 366), 86400000);
+  renderCalendar(matches, calYear, calMonth);
+});
+document.getElementById('cal-next').addEventListener('click', () => {
+  calMonth++;
+  if (calMonth > 11) { calMonth = 0; calYear++; }
+  const expr = ['f-min','f-hr','f-dom','f-mon','f-dow'].map(id => document.getElementById(id).value).join(' ');
+  const now = new Date();
+  const matches = getMatches(expr, now, new Date(now.getTime() + 86400000 * 366), 86400000);
+  renderCalendar(matches, calYear, calMonth);
+});
+
+initCal();
+update();
+</script>
+</body>
+</html>

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CSS Houdini 动画实验</title>
+  <link rel="stylesheet" href="https://biluonobug.github.io/demos/26-css-houdini/styles.css">
+</head>
+<body>
+  <div class="demo-container">
+    <header>
+      <h1>✨ CSS Houdini 动画实验</h1>
+      <p class="subtitle">探索浏览器底层 API，解锁 CSS 的无限可能</p>
+    </header>
+
+    <section class="demo-section" id="custom-paint">
+      <h2>🎨 自定义 Paint Worklet</h2>
+      <p>使用 <code>CSS.paintWorklet.addModule()</code> 注册自定义绘制逻辑，在 paint phase 生成动态背景。</p>
+      <div class="paint-box">
+        <div class="houdini-bg animated-gradient"></div>
+        <span>流动渐变背景</span>
+      </div>
+      <div class="paint-box">
+        <div class="houdini-bg dot-pattern"></div>
+        <span>动态点阵</span>
+      </div>
+      <div class="paint-box">
+        <div class="houdini-bg grid-pattern"></div>
+        <span>绘制网格</span>
+      </div>
+    </section>
+
+    <section class="demo-section" id="custom-properties">
+      <h2>🌀 CSS 自定义属性动画</h2>
+      <p>通过 <code>@property</code> 注册自定义属性，支持过渡和动画。</p>
+      <div class="props-demo">
+        <div class="prop-item">
+          <div class="hue-circle" id="hueBox"></div>
+          <label>Hue 旋转</label>
+        </div>
+        <div class="prop-item">
+          <div class="gradient-box" id="gradientBox"></div>
+          <label>渐变色过渡</label>
+        </div>
+        <div class="prop-item">
+          <div class="clip-box" id="clipBox"></div>
+          <label>裁剪路径动画</label>
+        </div>
+      </div>
+    </section>
+
+    <section class="demo-section" id="scroll-animation">
+      <h2>📜 Scroll-Driven 动画</h2>
+      <p>利用 Houdini Animation Worklet 实现与滚动位置同步的动画。</p>
+      <div class="scroll-demo-wrapper">
+        <div class="scroll-scene" id="scrollScene">
+          <div class="floating-element" id="floatingCard">
+            <div class="card-inner">
+              <span class="emoji">🚀</span>
+              <span class="card-text">Houdini!</span>
+            </div>
+          </div>
+          <div class="parallax-layer" id="layer1"></div>
+          <div class="parallax-layer" id="layer2"></div>
+        </div>
+        <div class="scroll-progress">
+          <div class="progress-bar" id="progressBar"></div>
+          <span id="progressText">0%</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="demo-section" id="morphing-shapes">
+      <h2>🔮 形状变形动画</h2>
+      <p>组合使用 Paint Worklet + 自定义属性实现复杂变形效果。</p>
+      <div class="morph-container">
+        <svg class="morph-svg" viewBox="0 0 200 200">
+          <defs>
+            <linearGradient id="morphGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" style="stop-color:#ff6b6b"/>
+              <stop offset="100%" style="stop-color:#4ecdc4"/>
+            </linearGradient>
+          </defs>
+          <path id="morphPath" fill="url(#morphGrad)" d="M100,20 L180,80 L160,180 L40,180 L20,80 Z"/>
+        </svg>
+        <button class="morph-btn" id="morphBtn">变! 🌀</button>
+      </div>
+    </section>
+
+    <section class="demo-section" id="worklet-progress">
+      <h2>📊 自定义进度条</h2>
+      <p>用 Paint Worklet 绘制带动态纹理的进度条。</p>
+      <div class="progress-demo">
+        <div class="worklet-progress" id="workletProgress">
+          <div class="progress-track">
+            <div class="progress-fill"></div>
+            <div class="progress-glow"></div>
+          </div>
+          <span class="progress-label">加载中...</span>
+        </div>
+        <div class="controls">
+          <button id="startProgress">开始 ▶️</button>
+          <button id="resetProgress">重置 🔄</button>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <p>💡 提示: Houdini API 需要 Chrome/Edge 88+ 等现代浏览器支持</p>
+      <p class="compat">
+        <span class="badge supported">✅ Paint Worklet</span>
+        <span class="badge supported">✅ CSS @property</span>
+        <span class="badge partial">⚠️ Animation Worklet</span>
+      </p>
+    </footer>
+  </div>
+
+  <script src="https://biluonobug.github.io/demos/26-css-houdini/worklet.js"></script>
+  <script src="https://biluonobug.github.io/demos/26-css-houdini/app.js"></script>
+</body>
+</html>

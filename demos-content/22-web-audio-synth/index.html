@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Web Audio 合成器</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0a0a0f;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: 'JetBrains Mono', monospace;
+      color: #e0e0e0;
+      overflow-x: hidden;
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+      background: linear-gradient(135deg, #667eea, #764ba2, #f64f59);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    .subtitle {
+      font-size: 0.75rem;
+      color: #666;
+      margin-bottom: 28px;
+      letter-spacing: 3px;
+    }
+
+    .controls-panel {
+      display: flex;
+      gap: 24px;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .control-group label {
+      font-size: 0.65rem;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+
+    .control-group input[type="range"] {
+      -webkit-appearance: none;
+      width: 120px;
+      height: 4px;
+      border-radius: 2px;
+      background: #333;
+      outline: none;
+    }
+
+    .control-group input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #667eea;
+      cursor: pointer;
+      box-shadow: 0 0 8px #667eea88;
+    }
+
+    .control-value {
+      font-size: 0.7rem;
+      color: #667eea;
+      min-width: 40px;
+      text-align: center;
+    }
+
+    .select-wrap select {
+      background: #1a1a2e;
+      border: 1px solid #333;
+      color: #e0e0e0;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 0.7rem;
+      cursor: pointer;
+      outline: none;
+    }
+
+    .piano {
+      display: flex;
+      position: relative;
+      height: 180px;
+      margin-bottom: 20px;
+    }
+
+    .key {
+      position: relative;
+      cursor: pointer;
+      border-radius: 0 0 8px 8px;
+      transition: all 0.06s ease;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      padding-bottom: 12px;
+      user-select: none;
+    }
+
+    .key.white {
+      width: 48px;
+      height: 180px;
+      background: linear-gradient(180deg, #f0f0f0 0%, #d8d8d8 100%);
+      border: 1px solid #ccc;
+      z-index: 1;
+      margin-right: -1px;
+    }
+
+    .key.white:hover { background: linear-gradient(180deg, #fff 0%, #ececec 100%); }
+    .key.white.active {
+      background: linear-gradient(180deg, #e0e0ff 0%, #c8c8f0 100%);
+      box-shadow: 0 0 20px #667eea55;
+      transform: translateY(2px);
+    }
+
+    .key.black {
+      width: 30px;
+      height: 110px;
+      background: linear-gradient(180deg, #2a2a2a 0%, #111 100%);
+      border: 1px solid #000;
+      z-index: 2;
+      margin-left: -16px;
+      margin-right: -16px;
+    }
+
+    .key.black:hover { background: linear-gradient(180deg, #3a3a3a 0%, #222 100%); }
+    .key.black.active {
+      background: linear-gradient(180deg, #444 0%, #333 100%);
+      box-shadow: 0 0 20px #667eea88;
+      transform: translateY(2px);
+    }
+
+    .key-label {
+      font-size: 0.6rem;
+      color: #999;
+      pointer-events: none;
+    }
+
+    .key.black .key-label { color: #555; }
+
+    .waveform-canvas {
+      width: 320px;
+      height: 60px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      background: #111;
+      border: 1px solid #222;
+    }
+
+    .presets {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+
+    .preset-btn {
+      background: #1a1a2e;
+      border: 1px solid #333;
+      color: #aaa;
+      padding: 5px 14px;
+      border-radius: 20px;
+      font-family: inherit;
+      font-size: 0.65rem;
+      cursor: pointer;
+      transition: all 0.2s;
+      letter-spacing: 1px;
+    }
+
+    .preset-btn:hover, .preset-btn.active {
+      background: #667eea;
+      color: #fff;
+      border-color: #667eea;
+      box-shadow: 0 0 12px #667eea55;
+    }
+
+    .note-display {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: #667eea;
+      height: 24px;
+      margin-bottom: 8px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+    }
+
+    .hint {
+      font-size: 0.65rem;
+      color: #444;
+      margin-top: 12px;
+      letter-spacing: 1px;
+    }
+
+    .visualizer {
+      display: flex;
+      gap: 3px;
+      height: 40px;
+      align-items: flex-end;
+      margin-bottom: 20px;
+    }
+
+    .viz-bar {
+      width: 6px;
+      background: linear-gradient(180deg, #667eea, #764ba2);
+      border-radius: 3px;
+      transition: height 0.05s ease;
+      min-height: 3px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Web Audio Synth</h1>
+  <div class="subtitle">BROWSER SYNTHESIZER</div>
+
+  <div class="note-display" id="noteDisplay">&nbsp;</div>
+
+  <div class="visualizer" id="visualizer"></div>
+
+  <div class="presets">
+    <button class="preset-btn active" data-wave="sine">Sine</button>
+    <button class="preset-btn" data-wave="square">Square</button>
+    <button class="preset-btn" data-wave="sawtooth">Sawtooth</button>
+    <button class="preset-btn" data-wave="triangle">Triangle</button>
+  </div>
+
+  <div class="controls-panel">
+    <div class="control-group">
+      <label>Attack</label>
+      <input type="range" id="attack" min="0.01" max="1" step="0.01" value="0.05">
+      <span class="control-value" id="attackVal">0.05s</span>
+    </div>
+    <div class="control-group">
+      <label>Decay</label>
+      <input type="range" id="decay" min="0.01" max="2" step="0.01" value="0.2">
+      <span class="control-value" id="decayVal">0.2s</span>
+    </div>
+    <div class="control-group">
+      <label>Sustain</label>
+      <input type="range" id="sustain" min="0" max="1" step="0.01" value="0.3">
+      <span class="control-value" id="sustainVal">0.3</span>
+    </div>
+    <div class="control-group">
+      <label>Release</label>
+      <input type="range" id="release" min="0.01" max="3" step="0.01" value="0.8">
+      <span class="control-value" id="releaseVal">0.8s</span>
+    </div>
+    <div class="control-group">
+      <label>Volume</label>
+      <input type="range" id="volume" min="0" max="1" step="0.01" value="0.4">
+      <span class="control-value" id="volumeVal">0.4</span>
+    </div>
+    <div class="control-group">
+      <label>Detune</label>
+      <input type="range" id="detune" min="-100" max="100" step="1" value="0">
+      <span class="control-value" id="detuneVal">0</span>
+    </div>
+  </div>
+
+  <div class="piano" id="piano"></div>
+
+  <canvas class="waveform-canvas" id="waveCanvas" width="320" height="60"></canvas>
+
+  <div class="hint">点击琴键或用键盘 A-L 弹奏</div>
+
+<script>
+const NOTES = [
+  { note: 'C', freq: 261.63, type: 'white' },
+  { note: 'C#', freq: 277.18, type: 'black' },
+  { note: 'D', freq: 293.66, type: 'white' },
+  { note: 'D#', freq: 311.13, type: 'black' },
+  { note: 'E', freq: 329.63, type: 'white' },
+  { note: 'F', freq: 349.23, type: 'white' },
+  { note: 'F#', freq: 369.99, type: 'black' },
+  { note: 'G', freq: 392.00, type: 'white' },
+  { note: 'G#', freq: 415.30, type: 'black' },
+  { note: 'A', freq: 440.00, type: 'white' },
+  { note: 'A#', freq: 466.16, type: 'black' },
+  { note: 'B', freq: 493.88, type: 'white' },
+  { note: 'C2', freq: 523.25, type: 'white' },
+  { note: 'C#2', freq: 554.37, type: 'black' },
+  { note: 'D2', freq: 587.33, type: 'white' },
+  { note: 'D#2', freq: 622.25, type: 'black' },
+  { note: 'E2', freq: 659.25, type: 'white' },
+  { note: 'F2', freq: 698.46, type: 'white' },
+];
+
+const KEYBOARD_MAP = {
+  'a': 0, 'w': 1, 's': 2, 'e': 3, 'd': 4, 'f': 5,
+  't': 6, 'g': 7, 'y': 8, 'h': 9, 'u': 10, 'j': 11,
+  'k': 12, 'o': 13, 'l': 14, 'p': 15, ';': 16, "'": 17
+};
+
+let audioCtx = null;
+let currentWave = 'sine';
+let gainNode = null;
+let analyser = null;
+let activeOscillators = {};
+let settings = { attack: 0.05, decay: 0.2, sustain: 0.3, release: 0.8, volume: 0.4, detune: 0 };
+
+function initAudio() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    gainNode = audioCtx.createGain();
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    gainNode.connect(analyser);
+    analyser.connect(audioCtx.destination);
+    gainNode.gain.value = settings.volume;
+  }
+}
+
+function playNote(index) {
+  initAudio();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+
+  const noteData = NOTES[index];
+  const osc = audioCtx.createOscillator();
+  const noteGain = audioCtx.createGain();
+
+  osc.type = currentWave;
+  osc.frequency.value = noteData.freq;
+  osc.detune.value = settings.detune;
+
+  const now = audioCtx.currentTime;
+  const { attack, decay, sustain, release } = settings;
+
+  noteGain.gain.setValueAtTime(0, now);
+  noteGain.gain.linearRampToValueAtTime(settings.volume, now + attack);
+  noteGain.gain.linearRampToValueAtTime(settings.volume * sustain, now + attack + decay);
+
+  osc.connect(noteGain);
+  noteGain.connect(gainNode);
+  osc.start(now);
+
+  activeOscillators[index] = { osc, noteGain };
+  document.getElementById('noteDisplay').textContent = noteData.note + ' — ' + noteData.freq.toFixed(1) + ' Hz';
+}
+
+function stopNote(index) {
+  if (!activeOscillators[index]) return;
+  const { osc, noteGain } = activeOscillators[index];
+  const now = audioCtx.currentTime;
+  noteGain.gain.cancelScheduledValues(now);
+  noteGain.gain.setValueAtTime(noteGain.gain.value, now);
+  noteGain.gain.linearRampToValueAtTime(0, now + settings.release);
+  osc.stop(now + settings.release + 0.1);
+  delete activeOscillators[index];
+  document.getElementById('noteDisplay').textContent = '\u00a0';
+}
+
+function buildPiano() {
+  const piano = document.getElementById('piano');
+  const whites = [];
+  const blacks = [];
+
+  NOTES.forEach((n, i) => {
+    const key = document.createElement('div');
+    key.className = `key ${n.type}`;
+    key.dataset.index = i;
+
+    const label = document.createElement('span');
+    label.className = 'key-label';
+    const keyChar = Object.entries(KEYBOARD_MAP).find(([, idx]) => idx === i)?.[0] || '';
+    label.textContent = keyChar ? keyChar.toUpperCase() : '';
+    key.appendChild(label);
+
+    if (n.type === 'white') whites.push(key);
+    else blacks.push(key);
+
+    key.addEventListener('mousedown', e => {
+      e.preventDefault();
+      playNote(i);
+      key.classList.add('active');
+    });
+    key.addEventListener('mouseup', () => {
+      stopNote(i);
+      key.classList.remove('active');
+    });
+    key.addEventListener('mouseleave', () => {
+      if (key.classList.contains('active')) {
+        stopNote(i);
+        key.classList.remove('active');
+      }
+    });
+    key.addEventListener('touchstart', e => {
+      e.preventDefault();
+      playNote(i);
+      key.classList.add('active');
+    }, { passive: false });
+    key.addEventListener('touchend', () => {
+      stopNote(i);
+      key.classList.remove('active');
+    });
+
+    piano.appendChild(key);
+  });
+}
+
+// Build visualizer bars
+function buildVisualizer() {
+  const viz = document.getElementById('visualizer');
+  for (let i = 0; i < 32; i++) {
+    const bar = document.createElement('div');
+    bar.className = 'viz-bar';
+    bar.style.height = '3px';
+    viz.appendChild(bar);
+  }
+}
+
+// Waveform canvas
+const waveCanvas = document.getElementById('waveCanvas');
+const waveCtx = waveCanvas.getContext('2d');
+
+function drawWaveform() {
+  if (!analyser) {
+    drawStaticWave();
+    requestAnimationFrame(drawWaveform);
+    return;
+  }
+
+  const bufLen = analyser.frequencyBinCount;
+  const dataArr = new Uint8Array(bufLen);
+  analyser.getByteTimeDomainData(dataArr);
+
+  waveCtx.fillStyle = '#111';
+  waveCtx.fillRect(0, 0, 320, 60);
+
+  waveCtx.lineWidth = 2;
+  waveCtx.strokeStyle = '#667eea';
+  waveCtx.shadowBlur = 6;
+  waveCtx.shadowColor = '#667eea';
+  waveCtx.beginPath();
+
+  const sliceW = 320 / bufLen;
+  let x = 0;
+  for (let i = 0; i < bufLen; i++) {
+    const v = dataArr[i] / 128.0;
+    const y = v * 30;
+    if (i === 0) waveCtx.moveTo(x, y);
+    else waveCtx.lineTo(x, y);
+    x += sliceW;
+  }
+  waveCtx.stroke();
+
+  // Update viz bars
+  const freqData = new Uint8Array(analyser.frequencyBinCount);
+  analyser.getByteFrequencyData(freqData);
+  const bars = document.querySelectorAll('.viz-bar');
+  bars.forEach((bar, i) => {
+    const val = freqData[i * 4] || 0;
+    bar.style.height = Math.max(3, (val / 255) * 40) + 'px';
+  });
+
+  requestAnimationFrame(drawWaveform);
+}
+
+function drawStaticWave() {
+  waveCtx.fillStyle = '#111';
+  waveCtx.fillRect(0, 0, 320, 60);
+  waveCtx.lineWidth = 2;
+  waveCtx.strokeStyle = '#333';
+  waveCtx.beginPath();
+  waveCtx.moveTo(0, 30);
+  waveCtx.lineTo(320, 30);
+  waveCtx.stroke();
+}
+
+// Controls
+['attack', 'decay', 'sustain', 'release', 'volume', 'detune'].forEach(param => {
+  const input = document.getElementById(param);
+  const valEl = document.getElementById(param + 'Val');
+  input.addEventListener('input', () => {
+    settings[param] = parseFloat(input.value);
+    if (param === 'volume') gainNode.gain.value = settings.volume;
+    if (param === 'attack') valEl.textContent = settings.attack + 's';
+    else if (param === 'decay') valEl.textContent = settings.decay + 's';
+    else if (param === 'release') valEl.textContent = settings.release + 's';
+    else valEl.textContent = settings[param];
+  });
+});
+
+// Presets
+document.querySelectorAll('.preset-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentWave = btn.dataset.wave;
+  });
+});
+
+// Keyboard
+document.addEventListener('keydown', e => {
+  if (e.repeat) return;
+  const idx = KEYBOARD_MAP[e.key.toLowerCase()];
+  if (idx !== undefined) {
+    const keys = document.querySelectorAll('.key');
+    const key = keys[idx];
+    if (key) {
+      playNote(idx);
+      key.classList.add('active');
+    }
+  }
+});
+
+document.addEventListener('keyup', e => {
+  const idx = KEYBOARD_MAP[e.key.toLowerCase()];
+  if (idx !== undefined) {
+    const keys = document.querySelectorAll('.key');
+    const key = keys[idx];
+    if (key) {
+      stopNote(idx);
+      key.classList.remove('active');
+    }
+  }
+});
+
+buildPiano();
+buildVisualizer();
+drawWaveform();
+</script>
+</body>
+</html>
