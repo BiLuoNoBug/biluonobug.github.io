@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>xterm.js 终端模拟器</title>
+<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.9.0/lib/xterm-addon-web-links.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; background: #0a0a0f; }
+  body { font-family: 'JetBrains Mono', monospace; display: flex; flex-direction: column; color: #e0e0e0; }
+  .topbar { background: #12121a; border-bottom: 1px solid #1e1e2e; padding: 8px 16px; display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+  .topbar-title { font-size: 14px; font-weight: 700; color: #00ff88; letter-spacing: 1px; text-transform: uppercase; }
+  .topbar-sub { font-size: 11px; color: #555; }
+  .topbar-right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .btn { background: #1a1a2e; border: 1px solid #2a2a3e; color: #888; padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-family: inherit; transition: all 0.2s; }
+  .btn:hover { background: #252538; color: #aaa; border-color: #3a3a5e; }
+  .btn-primary { background: #00cc6a; border-color: #00ff88; color: #000; font-weight: 700; }
+  .btn-primary:hover { background: #00ff88; }
+  .tabbar { background: #0e0e16; display: flex; align-items: center; border-bottom: 1px solid #1a1a2a; overflow-x: auto; flex-shrink: 0; min-height: 38px; }
+  .tabbar::-webkit-scrollbar { height: 0; }
+  .tab { display: flex; align-items: center; gap: 8px; padding: 8px 16px; font-size: 12px; color: #666; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; transition: all 0.2s; }
+  .tab:hover { color: #999; background: #16161e; }
+  .tab.active { color: #00ff88; border-bottom-color: #00ff88; background: #12121a; }
+  .tab-icon { font-size: 14px; }
+  .tab-close { width: 16px; height: 16px; border-radius: 3px; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #444; transition: all 0.15s; }
+  .tab-close:hover { background: #ff4466; color: #fff; }
+  .new-tab-btn { padding: 8px 12px; color: #444; cursor: pointer; font-size: 18px; transition: color 0.2s; }
+  .new-tab-btn:hover { color: #00ff88; }
+  .terminal-wrapper { flex: 1; position: relative; overflow: hidden; background: #0a0a0f; }
+  .terminal-container { width: 100%; height: 100%; padding: 8px; }
+  #terminal { width: 100%; height: 100%; }
+  .xterm-viewport::-webkit-scrollbar { width: 8px; }
+  .xterm-viewport::-webkit-scrollbar-track { background: #0a0a0f; }
+  .xterm-viewport::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 4px; }
+  .statusbar { background: #12121a; border-top: 1px solid #1e1e2e; padding: 4px 16px; display: flex; align-items: center; gap: 16px; font-size: 11px; color: #444; flex-shrink: 0; }
+  .statusbar span { display: flex; align-items: center; gap: 4px; }
+  .statusbar .accent { color: #00ff88; }
+  .dialog-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+  .dialog-overlay.open { opacity: 1; pointer-events: all; }
+  .dialog { background: #12121a; border: 1px solid #2a2a3e; border-radius: 12px; width: 420px; max-height: 80vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+  .dialog-header { padding: 16px 20px; border-bottom: 1px solid #1e1e2e; display: flex; align-items: center; justify-content: space-between; }
+  .dialog-header h2 { font-size: 15px; color: #00ff88; font-weight: 700; }
+  .dialog-close { background: none; border: none; color: #555; font-size: 20px; cursor: pointer; }
+  .dialog-body { padding: 20px; }
+  .form-group { margin-bottom: 14px; }
+  .form-group label { display: block; font-size: 11px; color: #666; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 1px; }
+  .form-group input, .form-group select { width: 100%; background: #0a0a0f; border: 1px solid #2a2a3e; border-radius: 6px; padding: 8px 12px; color: #e0e0e0; font-family: inherit; font-size: 13px; outline: none; transition: border-color 0.2s; }
+  .form-group input:focus, .form-group select:focus { border-color: #00ff88; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .dialog-footer { padding: 12px 20px; border-top: 1px solid #1e1e2e; display: flex; justify-content: flex-end; gap: 8px; }
+  .presets { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+  .preset-chip { padding: 4px 10px; background: #1a1a2e; border: 1px solid #2a2a3e; border-radius: 20px; font-size: 11px; color: #888; cursor: pointer; transition: all 0.2s; }
+  .preset-chip:hover { border-color: #00ff88; color: #00ff88; background: #0e1e16; }
+  .palette-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(4px); display: flex; align-items: flex-start; justify-content: center; padding-top: 15vh; z-index: 200; opacity: 0; pointer-events: none; transition: opacity 0.15s; }
+  .palette-overlay.open { opacity: 1; pointer-events: all; }
+  .palette { background: #12121a; border: 1px solid #2a2a3e; border-radius: 10px; width: 480px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); overflow: hidden; }
+  .palette-search { padding: 12px 16px; border-bottom: 1px solid #1e1e2e; display: flex; align-items: center; gap: 10px; }
+  .palette-search input { flex: 1; background: none; border: none; outline: none; color: #e0e0e0; font-family: inherit; font-size: 14px; }
+  .palette-search input::placeholder { color: #444; }
+  .palette-results { max-height: 300px; overflow-y: auto; }
+  .palette-item { padding: 10px 16px; display: flex; align-items: center; gap: 12px; cursor: pointer; transition: background 0.1s; }
+  .palette-item:hover, .palette-item.selected { background: #1a1a2e; }
+  .palette-item-icon { font-size: 16px; width: 24px; text-align: center; }
+  .palette-item-text { flex: 1; }
+  .palette-item-title { font-size: 13px; color: #ccc; }
+  .palette-item-desc { font-size: 11px; color: #555; margin-top: 2px; }
+  .palette-item-key { font-size: 11px; color: #444; background: #1a1a2e; padding: 2px 6px; border-radius: 3px; }
+  .activity-led { width: 8px; height: 8px; border-radius: 50%; background: #333; transition: background 0.1s; }
+  .activity-led.active { background: #00ff88; box-shadow: 0 0 6px #00ff88; }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="topbar-title">⌨ Terminal</span>
+  <span class="topbar-sub">xterm.js powered</span>
+  <div class="topbar-right">
+    <button class="btn" onclick="openPalette()">⌘ Ctrl+P</button>
+    <button class="btn btn-primary" onclick="openSshDialog()">+ New Session</button>
+  </div>
+</div>
+<div class="tabbar" id="tabbar">
+  <div class="new-tab-btn" onclick="createNewTab()">+</div>
+</div>
+<div class="terminal-wrapper">
+  <div class="terminal-container"><div id="terminal"></div></div>
+</div>
+<div class="statusbar" id="statusbar">
+  <span>🔗 <span class="accent" id="statusEncoding">UTF-8</span></span>
+  <span>📐 <span id="statusSize">80×24</span></span>
+  <span>⬆ <span id="statusUp">0 B/s</span></span>
+  <span>⬇ <span id="statusDown">0 B/s</span></span>
+  <span style="margin-left:auto">Ctrl+P 命令面板 · Ctrl+L 清屏</span>
+</div>
+<div class="dialog-overlay" id="sshDialog">
+  <div class="dialog">
+    <div class="dialog-header">
+      <h2>⚡ 新建连接</h2>
+      <button class="dialog-close" onclick="closeSshDialog()">×</button>
+    </div>
+    <div class="dialog-body">
+      <div class="presets">
+        <span class="preset-chip" onclick="usePreset('local')">🐧 本地 Shell</span>
+        <span class="preset-chip" onclick="usePreset('demo')">🖥 Demo Server</span>
+      </div>
+      <div class="form-group">
+        <label>连接类型</label>
+        <select id="connType" onchange="toggleSshFields()">
+          <option value="local">本地 Shell (本地终端)</option>
+          <option value="ssh">SSH 连接</option>
+        </select>
+      </div>
+      <div id="sshFields" style="display:none">
+        <div class="form-group"><label>主机地址</label><input type="text" id="sshHost" placeholder="192.168.1.100"></div>
+        <div class="form-row">
+          <div class="form-group"><label>端口</label><input type="text" id="sshPort" value="22"></div>
+          <div class="form-group"><label>用户名</label><input type="text" id="sshUser" placeholder="root"></div>
+        </div>
+        <div class="form-group"><label>密码</label><input type="password" id="sshPass" placeholder="••••••••"></div>
+      </div>
+      <div class="form-group"><label>会话名称（可选）</label><input type="text" id="sessionName" placeholder="我的服务器"></div>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn" onclick="closeSshDialog()">取消</button>
+      <button class="btn btn-primary" onclick="startConnection()">连接</button>
+    </div>
+  </div>
+</div>
+<div class="palette-overlay" id="paletteOverlay" onclick="if(event.target===this)closePalette()">
+  <div class="palette">
+    <div class="palette-search"><span>🔍</span><input type="text" id="paletteInput" placeholder="输入命令或搜索..." oninput="filterPalette()" onkeydown="handlePaletteKey(event)"></div>
+    <div class="palette-results" id="paletteResults"></div>
+  </div>
+</div>
+<script>
+let tabs=[];let activeTabId=null;let tabCounter=0;let activityTimers={};
+const paletteCommands=[
+  {icon:'🆕',title:'新建会话',desc:'打开连接对话框',key:'Ctrl+N',action:()=>openSshDialog()},
+  {icon:'🗑',title:'关闭当前标签',desc:'关闭活动中的标签页',key:'Ctrl+W',action:()=>closeActiveTab()},
+  {icon:'🔄',title:'重新连接',desc:'重新连接当前会话',key:'Ctrl+R',action:()=>reconnectTab()},
+  {icon:'📜',title:'清屏',desc:'清除终端内容',key:'Ctrl+L',action:()=>clearTerminal()},
+  {icon:'🔍',title:'搜索终端输出',desc:'在输出中搜索文本',key:'Ctrl+F',action:()=>searchTerminal()},
+  {icon:'📊',title:'会话信息',desc:'查看当前会话统计',key:'Ctrl+I',action:()=>showSessionInfo()},
+];
+function initPalette(){document.getElementById('paletteResults').innerHTML=paletteCommands.map((c,i)=>`<div class="palette-item${i===0?' selected':''}" data-index="${i}" onclick="executePaletteItem(${i})"><span class="palette-item-icon">${c.icon}</span><div class="palette-item-text"><div class="palette-item-title">${c.title}</div><div class="palette-item-desc">${c.desc}</div></div><span class="palette-item-key">${c.key}</span></div>`).join('');}
+function filterPalette(){const q=document.getElementById('paletteInput').value.toLowerCase();document.querySelectorAll('.palette-item').forEach((item,i)=>{const cmd=paletteCommands[item.dataset.index];item.style.display=(!q||cmd.title.toLowerCase().includes(q)||cmd.desc.toLowerCase().includes(q))?'':'none'});}
+function handlePaletteKey(e){const items=Array.from(document.querySelectorAll('.palette-item:not([style*="display: none"])'));if(e.key==='ArrowDown'){e.preventDefault();selectPaletteItem((getCurrentIndex()+1)%items.length);}if(e.key==='ArrowUp'){e.preventDefault();selectPaletteItem((getCurrentIndex()-1+items.length)%items.length);}if(e.key==='Enter'){e.preventDefault();const idx=items[getCurrentIndex()]?.dataset.index;if(idx!==undefined)executePaletteItem(parseInt(idx));}if(e.key==='Escape')closePalette();}
+function selectPaletteItem(index){document.querySelectorAll('.palette-item').forEach((it,i)=>it.classList.toggle('selected',i===index));document.querySelectorAll('.palette-item')[index]?.scrollIntoView({block:'nearest'});}
+function getCurrentIndex(){return Array.from(document.querySelectorAll('.palette-item:not([style*="display: none"])')).findIndex(it=>it.classList.contains('selected'));}
+function executePaletteItem(index){closePalette();paletteCommands[index].action();}
+function openPalette(){document.getElementById('paletteOverlay').classList.add('open');document.getElementById('paletteInput').value='';document.getElementById('paletteInput').focus();initPalette();filterPalette();}
+function closePalette(){document.getElementById('paletteOverlay').classList.remove('open');}
+function createNewTab(name=null,type='local'){const id=++tabCounter;const tab={id,name:name||`会话 ${id}`,type,term:null,fitAddon:null,connected:false};tabs.push(tab);renderTabs();activateTab(id);}
+function renderTabs(){const bar=document.getElementById('tabbar');bar.querySelectorAll('.tab').forEach(t=>t.remove());const newBtn=bar.querySelector('.new-tab-btn');tabs.forEach(tab=>{const el=document.createElement('div');el.className=`tab${tab.id===activeTabId?' active':''}`;el.dataset.id=tab.id;el.innerHTML=`<span class="activity-led${tab.connected?' active':''}" id="led-${tab.id}"></span><span class="tab-icon">${tab.type==='ssh'?'🖥':'🐧'}</span><span class="tab-name">${tab.name}</span><span class="tab-close" onclick="event.stopPropagation();closeTab(${tab.id})">×</span>`;el.onclick=()=>activateTab(tab.id);bar.insertBefore(el,newBtn);});}
+function activateTab(id){activeTabId=id;const tab=tabs.find(t=>t.id===id);if(!tab)return;document.getElementById('terminal').innerHTML='';if(!tab.term){initTerminalForTab(tab);}else{tab.term.open(document.getElementById('terminal'));tab.fitAddon.fit();}renderTabs();tab.term?.focus();updateStatusBar();}
+function initTerminalForTab(tab){const term=new Terminal({theme:{background:'#0a0a0f',foreground:'#00ff88',cursor:'#00ff88',cursorAccent:'#0a0a0f',selection:'rgba(0,255,136,0.2)',black:'#1a1a2e',red:'#ff4466',green:'#00ff88',yellow:'#ffcc00',blue:'#4488ff',magenta:'#cc44ff',cyan:'#00ccff',white:'#e0e0e0',brightBlack:'#444455',brightRed:'#ff6688',brightGreen:'#88ffbb',brightYellow:'#ffdd66',brightBlue:'#6699ff',brightMagenta:'#dd88ff',brightCyan:'#66ddff',brightWhite:'#ffffff'},fontFamily:'"JetBrains Mono",monospace',fontSize:14,lineHeight:1.2,cursorBlink:true,cursorStyle:'bar',allowTransparency:true,scrollback:5000});const fitAddon=new FitAddon.FitAddon();term.loadAddon(fitAddon);term.loadAddon(new WebLinksAddon.WebLinksAddon());term.open(document.getElementById('terminal'));fitAddon.fit();tab.term=term;tab.fitAddon=fitAddon;if(tab.type==='local')fakeLocalSession(term,tab);term.onData(d=>{flashLed(tab.id);});term.onResize(()=>updateStatusBar());updateStatusBar();}
+function fakeLocalSession(term,tab){const lines=['','  ╔══════════════════════════════════════════════╗','  ║     🐧 Linux 5.15.0 x86_64                  ║','  ║     Web Terminal v2.4.1                    ║','  ╚══════════════════════════════════════════════╝','','  欢迎使用 Web 终端模拟器','  支持命令：ls, pwd, whoami, date, help, neofetch, cowsay, matrix, history','  输入 help 查看更多命令','',];let i=0;const iv=setInterval(()=>{if(i>=lines.length){clearInterval(iv);tab.connected=true;updateLed(tab.id,true);showPrompt(term);}else{term.writeln(lines[i]);i++;}},80);}
+const fakeCommands={help:()=>['支持的命令:','  ls        - 列出目录内容','  pwd       - 显示当前目录','  whoami    - 显示当前用户','  date      - 显示日期时间','  echo      - 输出文本','  clear     - 清屏','  neofetch  - 显示系统信息','  cowsay    - ASCII 牛说话','  matrix    - 黑客帝国效果','  history   - 显示命令历史',''],ls:()=>['drwxr-xr-x  demo/','drwxr-xr-x  projects/','drwxr-xr-x  docs/','-rw-r--r--  README.md','-rw-r--r--  package.json','-rw-r--r--  notes.txt',''],pwd:()=>['/home/user/projects',''],whoami:()=>['web_user',''],date:()=>[new Date().toString(),''],neofetch:()=>['        ██╗    ██╗ █████╗ ██████╗ ██████╗ ','        ██║    ██║██╔══██╗██╔══██╗██╔══██╗','        ██║ █╗ ██║███████║██████╔╝██████╔╝','        ██║███╗██║██╔══██║██╔═══╝ ██╔═══╝ ','        ╚███╔███╔╝██║  ██║██║     ██║     ','         ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝     ╚═╝     ','','  OS: Web Terminal 2.4.1','  Host: Browser (xterm.js)','  Kernel: Linux 5.15.0','  Shell: web-bash 1.0','  Theme: Cyberpunk Green','  CPU: JS Engine V8','  Memory: 256MB / ∞','',],cowsay:(a)=>{const t=a.join(' ')||'Moo! I am a browser terminal!';const b='_'.repeat(t.length+2);return[` ${b}`,`< ${t} >`,` ${'-'.repeat(t.length+2)}`,'        \\   ^__^','         \\  (oo)\\_______','            (__)\\       )\\/\\','                ||----w |','                ||     ||','',];},matrix:(a,term)=>{let count=0;const ch='ｦｱｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ0123456789';const iv=setInterval(()=>{if(count++>50){clearInterval(iv);term.writeln('\n[Matrix 模式结束]');showPrompt(term);return;}let l='';for(let j=0;j<60;j++)l+=ch[Math.floor(Math.random()*ch.length)];term.writeln(l);},50);return null;},history:()=>['  1  neofetch','  2  cowsay Hello','  3  ls -la','  4  help','  5  date',''],};
+function showPrompt(term){term.write('\r\n\x1b[32muser@web-term\x1b[0m:\x1b[34m~\x1b[0m$ ');}
+function handleCommand(term,data){const t=data.trim();if(!t){showPrompt(term);return;}term.writeln('');const parts=t.split(/\s+/);const cmd=parts[0].toLowerCase();const args=parts.slice(1);if(cmd==='clear'){term.clear();showPrompt(term);return;}if(fakeCommands[cmd]){const r=fakeCommands[cmd](args,term);if(r){r.forEach(l=>term.writeln(l));showPrompt(term);}}else{term.writeln(`\x1b[31mbash: ${cmd}: command not found\x1b[0m`);term.writeln('输入 \x1b[33mhelp\x1b[0m 查看可用命令');showPrompt(term);}}
+function closeTab(id){const idx=tabs.findIndex(t=>t.id===id);if(idx<0)return;const tab=tabs[idx];if(tab.term){tab.term.dispose();clearInterval(activityTimers[id]);}tabs.splice(idx,1);if(activeTabId===id){if(tabs.length>0){activateTab(tabs[Math.max(0,idx-1)].id);}else{activeTabId=null;document.getElementById('terminal').innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#333;font-size:13px;">暂无活动会话 · 点击右上角"新建会话"开始</div>';updateStatusBar();}}renderTabs();}
+function closeActiveTab(){if(activeTabId)closeTab(activeTabId);}
+function reconnectTab(){const tab=tabs.find(t=>t.id===activeTabId);if(!tab||!tab.term)return;tab.term.clear();tab.connected=false;updateLed(tab.id,false);if(tab.type==='local')fakeLocalSession(tab.term,tab);}
+function flashLed(id){const led=document.getElementById('led-'+id);if(led){led.classList.add('active');clearTimeout(activityTimers[id]);activityTimers[id]=setTimeout(()=>{const tab=tabs.find(t=>t.id===id);updateLed(id,tab?.connected);},200);}}
+function updateLed(id,connected){const led=document.getElementById('led-'+id);if(led)led.classList.toggle('active',connected);}
+function updateStatusBar(){const tab=tabs.find(t=>t.id===activeTabId);if(!tab||!tab.term){document.getElementById('statusSize').textContent='-';return;}document.getElementById('statusSize').textContent=tab.term.cols+'×'+tab.term.rows;}
+function openSshDialog(){document.getElementById('sshDialog').classList.add('open');toggleSshFields();}
+function closeSshDialog(){document.getElementById('sshDialog').classList.remove('open');}
+function toggleSshFields(){document.getElementById('sshFields').style.display=document.getElementById('connType').value==='ssh'?'':'none';}
+function usePreset(p){if(p==='local'){document.getElementById('connType').value='local';toggleSshFields();}else if(p==='demo'){document.getElementById('connType').value='ssh';document.getElementById('sshHost').value='demo-server.local';document.getElementById('sshPort').value='22';document.getElementById('sshUser').value='demo';document.getElementById('sshPass').value='demo';document.getElementById('sessionName').value='Demo Server';toggleSshFields();}}
+function startConnection(){const type=document.getElementById('connType').value;const name=document.getElementById('sessionName').value||(type==='local'?'本地会话':'SSH连接');closeSshDialog();createNewTab(name,type);}
+function clearTerminal(){const tab=tabs.find(t=>t.id===activeTabId);if(tab?.term){tab.term.clear();showPrompt(tab.term);}}
+function searchTerminal(){const q=prompt('搜索终端输出:');if(q)alert('终端搜索: '+q);}
+function showSessionInfo(){const tab=tabs.find(t=>t.id===activeTabId);if(tab?.term)alert('会话信息\n尺寸: '+tab.term.cols+'x'+tab.term.rows+'\n连接: '+(tab.connected?'已连接':'未连接'));}
+document.addEventListener('keydown',e=>{if(e.ctrlKey&&e.key==='p'){e.preventDefault();openPalette();}});
+initPalette();
+createNewTab();
+</script>
+</body>
+</html>

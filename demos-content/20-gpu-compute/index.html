@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GPU.js 并行计算 - 矩阵运算性能对比</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Space+Grotesk:wght@400;600;700&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --border: #1e1e2e;
+    --accent: #7c3aed;
+    --accent2: #06b6d4;
+    --text: #e2e8f0;
+    --dim: #64748b;
+    --green: #10b981;
+    --red: #ef4444;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Grotesk', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .hero {
+    text-align: center;
+    padding: 60px 20px 40px;
+    position: relative;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 50%; transform: translateX(-50%);
+    width: 600px; height: 300px;
+    background: radial-gradient(ellipse at center, rgba(124,58,237,0.15) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 4px 16px;
+    background: rgba(124,58,237,0.2);
+    border: 1px solid rgba(124,58,237,0.4);
+    border-radius: 20px;
+    font-size: 12px;
+    color: #a78bfa;
+    margin-bottom: 20px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  h1 {
+    font-size: clamp(28px, 5vw, 48px);
+    font-weight: 700;
+    background: linear-gradient(135deg, #e2e8f0 0%, #a78bfa 50%, #06b6d4 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 16px;
+  }
+
+  .subtitle {
+    color: var(--dim);
+    font-size: 16px;
+    max-width: 500px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+
+  .grid-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 20px 40px;
+  }
+
+  @media (max-width: 768px) {
+    .grid-container { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .panel::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(124,58,237,0.5), transparent);
+  }
+
+  .panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+
+  .panel-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .chip {
+    padding: 4px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .chip-gpu { background: rgba(16,185,129,0.15); color: var(--green); border: 1px solid rgba(16,185,129,0.3); }
+  .chip-cpu { background: rgba(239,68,68,0.15); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
+
+  .controls {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+  }
+
+  .control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .control-group label {
+    font-size: 11px;
+    color: var(--dim);
+    font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase;
+  }
+
+  input[type="range"] {
+    width: 140px;
+    accent-color: var(--accent);
+  }
+
+  .btn {
+    padding: 10px 24px;
+    border: none;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: 'Space Grotesk', sans-serif;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), #9333ea);
+    color: white;
+    box-shadow: 0 4px 15px rgba(124,58,237,0.3);
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(124,58,237,0.4);
+  }
+
+  .btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .btn-secondary {
+    background: var(--border);
+    color: var(--text);
+  }
+
+  .btn-secondary:hover { background: #2a2a3e; }
+
+  .matrix-viz {
+    position: relative;
+    height: 160px;
+    background: #080810;
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 20px;
+  }
+
+  canvas { display: block; }
+
+  .matrix-label {
+    position: absolute;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: rgba(255,255,255,0.4);
+    bottom: 8px; right: 12px;
+  }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .stat {
+    background: rgba(255,255,255,0.03);
+    border-radius: 10px;
+    padding: 12px;
+    text-align: center;
+  }
+
+  .stat-value {
+    font-size: 22px;
+    font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .stat-label {
+    font-size: 10px;
+    color: var(--dim);
+    text-transform: uppercase;
+    margin-top: 4px;
+  }
+
+  .time-gpu { color: var(--green); }
+  .time-cpu { color: var(--red); }
+
+  .progress-bar {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+
+  .progress-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.1s;
+    width: 0%;
+  }
+
+  .progress-gpu { background: linear-gradient(90deg, var(--green), #34d399); }
+  .progress-cpu { background: linear-gradient(90deg, var(--red), #f87171); }
+
+  .progress-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--dim);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .speedup-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: linear-gradient(135deg, rgba(16,185,129,0.15), rgba(6,182,212,0.15));
+    border: 1px solid rgba(16,185,129,0.3);
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--green);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .speedup-badge .arrow {
+    font-size: 18px;
+  }
+
+  .log {
+    background: #080810;
+    border-radius: 10px;
+    padding: 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    height: 120px;
+    overflow-y: auto;
+    color: #94a3b8;
+    line-height: 1.8;
+  }
+
+  .log::-webkit-scrollbar { width: 4px; }
+  .log::-webkit-scrollbar-track { background: transparent; }
+  .log::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .log-entry { opacity: 0.7; }
+  .log-entry.success { color: var(--green); opacity: 1; }
+  .log-entry.error { color: var(--red); opacity: 1; }
+
+  .formula {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: #a78bfa;
+    background: rgba(124,58,237,0.1);
+    padding: 8px 14px;
+    border-radius: 8px;
+    display: inline-block;
+    margin-top: 8px;
+  }
+
+  .tag-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+  }
+
+  .tag {
+    padding: 3px 10px;
+    background: rgba(6,182,212,0.1);
+    border: 1px solid rgba(6,182,212,0.2);
+    border-radius: 6px;
+    font-size: 11px;
+    color: #67e8f9;
+  }
+
+  footer {
+    text-align: center;
+    padding: 20px;
+    color: var(--dim);
+    font-size: 12px;
+    border-top: 1px solid var(--border);
+    margin-top: 40px;
+  }
+</style>
+</head>
+<body>
+  <div class="hero">
+    <span class="badge">GPU.js Demo #20</span>
+    <h1>GPU.js 并行计算</h1>
+    <p class="subtitle">用 GPU 加速矩阵运算，实时对比 CPU vs GPU 性能差距。支持矩阵乘法、逐元素运算等多种计算范式。</p>
+    <div class="tag-row">
+      <span class="tag">GPU.js</span>
+      <span class="tag">并行计算</span>
+      <span class="tag">WebGL</span>
+      <span class="tag">性能优化</span>
+    </div>
+  </div>
+
+  <div class="grid-container">
+    <!-- CPU Panel -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">CPU 计算</span>
+        <span class="chip chip-cpu">Sequential</span>
+      </div>
+      <div class="matrix-viz">
+        <canvas id="cpuCanvas" width="400" height="140"></canvas>
+        <span class="matrix-label" id="cpuLabel">—</span>
+      </div>
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-value time-cpu" id="cpuTime">—</div>
+          <div class="stat-label">耗时 (ms)</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="cpuOps" style="color:var(--text)">—</div>
+          <div class="stat-label">运算次数</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="cpuPerf" style="color:var(--dim)">—</div>
+          <div class="stat-label">MFLOPS</div>
+        </div>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill progress-cpu" id="cpuBar"></div>
+      </div>
+      <div class="progress-label"><span>进度</span><span id="cpuProgress">0%</span></div>
+    </div>
+
+    <!-- GPU Panel -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">GPU 计算</span>
+        <span class="chip chip-gpu">Parallel</span>
+      </div>
+      <div class="matrix-viz">
+        <canvas id="gpuCanvas" width="400" height="140"></canvas>
+        <span class="matrix-label" id="gpuLabel">—</span>
+      </div>
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-value time-gpu" id="gpuTime">—</div>
+          <div class="stat-label">耗时 (ms)</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="gpuOps" style="color:var(--text)">—</div>
+          <div class="stat-label">运算次数</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="gpuPerf" style="color:var(--dim)">—</div>
+          <div class="stat-label">MFLOPS</div>
+        </div>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill progress-gpu" id="gpuBar"></div>
+      </div>
+      <div class="progress-label"><span>进度</span><span id="gpuProgress">0%</span></div>
+    </div>
+
+    <!-- Controls Panel -->
+    <div class="panel" style="grid-column: 1 / -1">
+      <div class="panel-header">
+        <span class="panel-title">控制台</span>
+        <div id="speedupDisplay" style="display:none">
+          <span class="speedup-badge">
+            <span class="arrow">⚡</span>
+            <span id="speedupValue">—</span>x 加速
+          </span>
+        </div>
+      </div>
+      <div class="controls">
+        <div class="control-group">
+          <label>矩阵维度</label>
+          <input type="range" id="sizeSlider" min="64" max="512" value="256" step="64">
+        </div>
+        <div class="control-group">
+          <label>运行次数</label>
+          <input type="range" id="iterSlider" min="1" max="10" value="3">
+        </div>
+        <div class="control-group">
+          <label>运算类型</label>
+          <select id="opSelect" style="background:#1e1e2e;color:#e2e8f0;border:1px solid #2a2a3e;border-radius:8px;padding:8px 12px;font-family:Space Grotesk;font-size:13px;">
+            <option value="multiply">矩阵乘法</option>
+            <option value="add">矩阵加法</option>
+            <option value="elementwise">逐元素运算</option>
+          </select>
+        </div>
+        <button class="btn btn-primary" id="runBtn" onclick="runBenchmark()">🚀 运行基准测试</button>
+        <button class="btn btn-secondary" onclick="clearResults()">清除</button>
+      </div>
+      <div class="formula" id="formulaInfo">C = A × B (矩阵乘法)</div>
+      <div class="log" id="logPanel" style="margin-top:16px;">
+        <div class="log-entry">> 准备就绪，点击「运行基准测试」开始对比...</div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    基于 GPU.js 构建 · 浏览器端并行计算演示
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/gpu.js@2.16.0/dist/gpu-browser.min.js"></script>
+  <script>
+    let gpu = null;
+    let isRunning = false;
+
+    function initGPU() {
+      try {
+        gpu = new GPU.GPU();
+        log('GPU.js 初始化成功 ✓', 'success');
+        log('WebGL 信息: ' + (gpu.canvas ? '支持' : '不支持'), gpu.canvas ? 'success' : 'error');
+        return true;
+      } catch(e) {
+        log('GPU.js 初始化失败: ' + e.message, 'error');
+        return false;
+      }
+    }
+
+    function log(msg, type='') {
+      const panel = document.getElementById('logPanel');
+      const line = document.createElement('div');
+      line.className = 'log-entry ' + type;
+      const time = new Date().toLocaleTimeString();
+      line.textContent = `[${time}] ${msg}`;
+      panel.appendChild(line);
+      panel.scrollTop = panel.scrollHeight;
+    }
+
+    function drawMatrix(canvasId, size, progress, color1, color2) {
+      const canvas = document.getElementById(canvasId);
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width, h = canvas.height;
+      ctx.clearRect(0, 0, w, h);
+
+      const cellSize = Math.min(w / size, h / size);
+      const offsetX = (w - cellSize * size) / 2;
+      const offsetY = (h - cellSize * size) / 2;
+
+      for (let i = 0; i < size; i++) {
+        for (let j = 0; j < size; j++) {
+          const x = offsetX + j * cellSize;
+          const y = offsetY + i * cellSize;
+          const filled = (i * size + j) / (size * size) < progress;
+          if (filled) {
+            const brightness = 0.4 + Math.random() * 0.6;
+            ctx.fillStyle = `rgba(${color1}, ${color2}, 255, ${brightness})`;
+          } else {
+            ctx.fillStyle = 'rgba(255,255,255,0.04)';
+          }
+          ctx.fillRect(x + 0.5, y + 0.5, cellSize - 1, cellSize - 1);
+        }
+      }
+    }
+
+    function matrixMultiplyCPU(A, B) {
+      const n = A.length;
+      const C = new Array(n).fill(0).map(() => new Array(n).fill(0));
+      for (let i = 0; i < n; i++) {
+        for (let k = 0; k < n; k++) {
+          for (let j = 0; j < n; j++) {
+            C[i][j] += A[i][k] * B[k][j];
+          }
+        }
+      }
+      return C;
+    }
+
+    function matrixAddCPU(A, B) {
+      const n = A.length;
+      const C = new Array(n).fill(0).map(() => new Array(n).fill(0));
+      for (let i = 0; i < n; i++) {
+        for (let j = 0; j < n; j++) {
+          C[i][j] = A[i][j] + B[i][j];
+        }
+      }
+      return C;
+    }
+
+    function elementWiseCPU(A, B) {
+      const n = A.length;
+      const C = new Array(n).fill(0).map(() => new Array(n).fill(0));
+      for (let i = 0; i < n; i++) {
+        for (let j = 0; j < n; j++) {
+          C[i][j] = Math.sin(A[i][j]) + Math.cos(B[i][j]);
+        }
+      }
+      return C;
+    }
+
+    function generateMatrix(size) {
+      const m = new Array(size).fill(0).map(() => new Array(size).fill(0));
+      for (let i = 0; i < size; i++) {
+        for (let j = 0; j < size; j++) {
+          m[i][j] = Math.random();
+        }
+      }
+      return m;
+    }
+
+    function formatNum(n) {
+      return n.toLocaleString();
+    }
+
+    function animateProgress(canvasId, labelId, barId, progressId, duration, onDone) {
+      const start = performance.now();
+      const steps = 30;
+      let step = 0;
+
+      function tick() {
+        const elapsed = performance.now() - start;
+        const progress = Math.min(elapsed / duration, 1);
+        const currentProgress = progress;
+
+        const size = parseInt(document.getElementById('sizeSlider').value);
+        const color1 = labelId === 'cpuLabel' ? '124, 58, 237' : '16, 185, 129';
+        const color2 = labelId === 'cpuLabel' ? '237, 72, 161' : '6, 182, 212';
+        drawMatrix(canvasId, Math.min(size, 32), currentProgress, color1, color2);
+
+        document.getElementById(barId).style.width = (currentProgress * 100) + '%';
+        document.getElementById(progressId).textContent = Math.round(currentProgress * 100) + '%';
+
+        if (progress < 1) {
+          requestAnimationFrame(tick);
+        } else {
+          onDone();
+        }
+      }
+      tick();
+    }
+
+    async function runBenchmark() {
+      if (isRunning) return;
+      isRunning = true;
+
+      const btn = document.getElementById('runBtn');
+      btn.disabled = true;
+      btn.textContent = '⏳ 运行中...';
+
+      const size = parseInt(document.getElementById('sizeSlider').value);
+      const iterations = parseInt(document.getElementById('iterSlider').value);
+      const op = document.getElementById('opSelect').value;
+
+      const formulas = {
+        multiply: 'C = A × B (矩阵乘法)',
+        add: 'C = A + B (矩阵加法)',
+        elementwise: 'C = sin(A) + cos(B) (逐元素)'
+      };
+      document.getElementById('formulaInfo').textContent = formulas[op];
+
+      log(`开始基准测试: ${size}x${size} 矩阵, ${iterations} 次迭代, ${op}`);
+      log('生成测试数据...', '');
+
+      const A = generateMatrix(size);
+      const B = generateMatrix(size);
+
+      // CPU test
+      log('CPU 计算开始...', '');
+      const cpuStart = performance.now();
+
+      let cpuResult;
+      for (let i = 0; i < iterations; i++) {
+        if (op === 'multiply') cpuResult = matrixMultiplyCPU(A, B);
+        else if (op === 'add') cpuResult = matrixAddCPU(A, B);
+        else cpuResult = elementWiseCPU(A, B);
+
+        const progress = (i + 1) / iterations;
+        const elapsed = performance.now() - cpuStart;
+        const duration = Math.max(elapsed / progress - elapsed, 100);
+        animateProgress('cpuCanvas', 'cpuLabel', 'cpuBar', 'cpuProgress', duration, () => {});
+      }
+
+      await new Promise(r => setTimeout(r, 50));
+      const cpuTime = performance.now() - cpuStart;
+
+      document.getElementById('cpuLabel').textContent = `${size}×${size}`;
+      document.getElementById('cpuTime').textContent = cpuTime.toFixed(2);
+      const cpuOps = op === 'multiply' ? size * size * size * 2 : size * size * 2;
+      document.getElementById('cpuOps').textContent = formatNum(cpuOps * iterations);
+      document.getElementById('cpuPerf').textContent = ((cpuOps * iterations) / cpuTime / 1000).toFixed(1);
+
+      log(`CPU 完成: ${cpuTime.toFixed(2)}ms`, 'success');
+
+      // GPU test
+      log('GPU 计算开始...', '');
+      const gpuStart = performance.now();
+
+      if (!gpu) {
+        initGPU();
+      }
+
+      if (!gpu) {
+        log('GPU 不可用，跳过 GPU 测试', 'error');
+      } else {
+        try {
+          const createGPUFunc = () => {
+            if (op === 'multiply') {
+              return gpu.createKernel(function(a, b) {
+                let sum = 0;
+                for (let k = 0; k < this.constants.size; k++) {
+                  sum += a[this.thread.y][k] * b[k][this.thread.x];
+                }
+                return sum;
+              }, {
+                output: [size, size],
+                constants: { size: size }
+              });
+            } else if (op === 'add') {
+              return gpu.createKernel(function(a, b) {
+                return a[this.thread.y][this.thread.x] + b[this.thread.y][this.thread.x];
+              }, { output: [size, size] });
+            } else {
+              return gpu.createKernel(function(a, b) {
+                return Math.sin(a[this.thread.y][this.thread.x]) + Math.cos(b[this.thread.y][this.thread.x]);
+              }, { output: [size, size] });
+            }
+          };
+
+          const kernel = createGPUFunc();
+          const gpuTime = performance.now() - gpuStart;
+          const gpuTotalStart = performance.now();
+
+          for (let i = 0; i < iterations; i++) {
+            kernel(A, B);
+            const progress = (i + 1) / iterations;
+            const elapsed = performance.now() - gpuTotalStart;
+            const duration = Math.max(elapsed / progress - elapsed, 100);
+            animateProgress('gpuCanvas', 'gpuLabel', 'gpuBar', 'gpuProgress', duration, () => {});
+            await new Promise(r => setTimeout(r, 20));
+          }
+
+          const totalGpuTime = performance.now() - gpuTotalStart;
+
+          document.getElementById('gpuLabel').textContent = `${size}×${size}`;
+          document.getElementById('gpuTime').textContent = totalGpuTime.toFixed(2);
+          document.getElementById('gpuOps').textContent = formatNum(cpuOps * iterations);
+          document.getElementById('gpuPerf').textContent = ((cpuOps * iterations) / totalGpuTime / 1000).toFixed(1);
+
+          const speedup = (cpuTime / totalGpuTime).toFixed(1);
+          document.getElementById('speedupValue').textContent = speedup;
+          document.getElementById('speedupDisplay').style.display = 'inline-flex';
+
+          log(`GPU 完成: ${totalGpuTime.toFixed(2)}ms (加速 ${speedup}x)`, 'success');
+
+          kernel.destroy();
+        } catch(e) {
+          log('GPU 计算失败: ' + e.message, 'error');
+        }
+      }
+
+      document.getElementById('cpuBar').style.width = '100%';
+      document.getElementById('cpuProgress').textContent = '100%';
+      document.getElementById('gpuBar').style.width = '100%';
+      document.getElementById('gpuProgress').textContent = '100%';
+
+      btn.disabled = false;
+      btn.textContent = '🚀 运行基准测试';
+      isRunning = false;
+      log('基准测试完成 ✓', 'success');
+    }
+
+    function clearResults() {
+      document.getElementById('cpuTime').textContent = '—';
+      document.getElementById('cpuOps').textContent = '—';
+      document.getElementById('cpuPerf').textContent = '—';
+      document.getElementById('gpuTime').textContent = '—';
+      document.getElementById('gpuOps').textContent = '—';
+      document.getElementById('gpuPerf').textContent = '—';
+      document.getElementById('cpuBar').style.width = '0%';
+      document.getElementById('gpuBar').style.width = '0%';
+      document.getElementById('cpuProgress').textContent = '0%';
+      document.getElementById('gpuProgress').textContent = '0%';
+      document.getElementById('cpuLabel').textContent = '—';
+      document.getElementById('gpuLabel').textContent = '—';
+      document.getElementById('speedupDisplay').style.display = 'none';
+      document.getElementById('logPanel').innerHTML = '<div class="log-entry">> 已清除，重新开始...</div>';
+      drawMatrix('cpuCanvas', 16, 0, '124, 58, 237', '237, 72, 161');
+      drawMatrix('gpuCanvas', 16, 0, '16, 185, 129', '6, 182, 212');
+    }
+
+    document.getElementById('sizeSlider').addEventListener('input', function() {
+      const s = this.value;
+      document.getElementById('formulaInfo').textContent = `${s}×${s} 矩阵运算`;
+    });
+
+    // Init
+    initGPU();
+    drawMatrix('cpuCanvas', 16, 0.15, '124, 58, 237', '237, 72, 161');
+    drawMatrix('gpuCanvas', 16, 0.15, '16, 185, 129', '6, 182, 212');
+  </script>
+</body>
+</html>

@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTTP API 调试台</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0d1117; --surface: #161b22; --surface2: #21262d; --border: #30363d;
+    --text: #e6edf3; --text2: #8b949e; --accent: #58a6ff; --green: #3fb950;
+    --orange: #d29922; --red: #f85149; --purple: #a371f7;
+  }
+  body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+  .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 16px 24px; display: flex; align-items: center; gap: 16px; }
+  .logo { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 18px; color: var(--accent); }
+  .logo span { color: var(--text2); }
+  .tabs { display: flex; gap: 4px; margin-left: auto; }
+  .tab { padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--text2); background: transparent; border: none; transition: all 0.15s; }
+  .tab:hover { color: var(--text); background: var(--surface2); }
+  .tab.active { color: var(--text); background: var(--surface2); }
+  .main { display: grid; grid-template-columns: 280px 1fr; min-height: calc(100vh - 65px); }
+  .sidebar { background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; }
+  .sidebar-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  .sidebar-title { font-size: 12px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; }
+  .sidebar-actions { display: flex; gap: 4px; }
+  .icon-btn { width: 28px; height: 28px; border-radius: 6px; border: none; background: transparent; color: var(--text2); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; transition: all 0.15s; }
+  .icon-btn:hover { background: var(--surface2); color: var(--text); }
+  .history-list { flex: 1; overflow-y: auto; }
+  .history-item { padding: 12px 16px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.1s; }
+  .history-item:hover { background: var(--surface2); }
+  .history-item.active { background: var(--surface2); border-left: 3px solid var(--accent); }
+  .history-method { font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 4px; display: inline-block; margin-bottom: 4px; }
+  .method-get { background: rgba(63,185,80,0.15); color: var(--green); }
+  .method-post { background: rgba(88,166,255,0.15); color: var(--accent); }
+  .method-put { background: rgba(210,153,34,0.15); color: var(--orange); }
+  .method-delete { background: rgba(248,81,73,0.15); color: var(--red); }
+  .method-patch { background: rgba(163,113,247,0.15); color: var(--purple); }
+  .history-url { font-size: 12px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+  .history-status { font-size: 11px; color: var(--text2); margin-top: 4px; }
+  .editor-panel { display: flex; flex-direction: column; }
+  .url-bar { padding: 16px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; }
+  .method-select { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; min-width: 100px; }
+  .url-input { flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 14px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); outline: none; transition: border-color 0.15s; }
+  .url-input:focus { border-color: var(--accent); }
+  .send-btn { padding: 10px 24px; border-radius: 8px; border: none; background: var(--accent); color: #fff; font-weight: 600; font-size: 14px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+  .send-btn:hover { background: #4c9aed; }
+  .send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .sub-tabs { padding: 0 16px; border-bottom: 1px solid var(--border); display: flex; gap: 0; }
+  .sub-tab { padding: 12px 20px; font-size: 13px; font-weight: 500; color: var(--text2); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.15s; }
+  .sub-tab:hover { color: var(--text); }
+  .sub-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .sub-tab .badge { display: inline-block; background: var(--surface2); color: var(--text2); font-size: 11px; padding: 1px 6px; border-radius: 10px; margin-left: 4px; }
+  .content-area { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+  .tab-content { flex: 1; overflow: auto; display: none; padding: 16px; }
+  .tab-content.active { display: block; }
+  textarea.raw-editor, .key-value-editor, .params-table { width: 100%; height: 100%; font-family: 'JetBrains Mono', monospace; font-size: 13px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 12px; resize: none; outline: none; }
+  .key-value-row { display: grid; grid-template-columns: 1fr 1fr 40px; gap: 8px; padding: 4px 0; }
+  .kv-input { font-family: 'JetBrains Mono', monospace; font-size: 12px; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface); color: var(--text); outline: none; }
+  .kv-input:focus { border-color: var(--accent); }
+  .kv-del { width: 32px; height: 32px; border-radius: 6px; border: none; background: transparent; color: var(--text2); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .kv-del:hover { background: var(--surface2); color: var(--red); }
+  .add-row-btn { margin-top: 8px; padding: 8px 16px; border-radius: 6px; border: 1px dashed var(--border); background: transparent; color: var(--text2); cursor: pointer; font-size: 12px; transition: all 0.15s; }
+  .add-row-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .response-area { flex: 1; display: flex; flex-direction: column; min-height: 0; border-top: 1px solid var(--border); }
+  .response-header { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+  .status-badge { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; padding: 4px 10px; border-radius: 6px; }
+  .status-2xx { background: rgba(63,185,80,0.15); color: var(--green); }
+  .status-3xx { background: rgba(88,166,255,0.15); color: var(--accent); }
+  .status-4xx { background: rgba(210,153,34,0.15); color: var(--orange); }
+  .status-5xx { background: rgba(248,81,73,0.15); color: var(--red); }
+  .response-meta { font-size: 12px; color: var(--text2); display: flex; gap: 16px; }
+  .response-meta span { display: flex; align-items: center; gap: 4px; }
+  .response-tabs { padding: 0 16px; border-bottom: 1px solid var(--border); display: flex; }
+  .resp-tab { padding: 10px 16px; font-size: 12px; font-weight: 500; color: var(--text2); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .resp-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .response-body { flex: 1; overflow: auto; padding: 16px; }
+  pre { font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.6; white-space: pre-wrap; word-break: break-all; }
+  .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--text2); text-align: center; padding: 40px; }
+  .empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+  .empty-title { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+  .empty-desc { font-size: 13px; }
+  .spinner { width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-overlay { position: fixed; inset: 0; background: rgba(13,17,23,0.8); display: flex; align-items: center; justify-content: center; z-index: 100; }
+  .loading-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 32px 48px; text-align: center; }
+  .loading-card .spinner { width: 32px; height: 32px; margin: 0 auto 16px; }
+  .loading-title { font-weight: 600; margin-bottom: 4px; }
+  .loading-url { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text2); margin-top: 8px; max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  @media (max-width: 768px) {
+    .main { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .url-bar { flex-wrap: wrap; }
+    .method-select { min-width: 80px; }
+    .url-input { width: 100%; order: 2; }
+  }
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="logo">⚡ <span>API</span> Console</div>
+  <div class="tabs">
+    <button class="tab active" onclick="showPanel('request')">请求</button>
+    <button class="tab" onclick="showPanel('history')">历史</button>
+    <button class="tab" onclick="showPanel('env')">环境变量</button>
+  </div>
+</div>
+<div class="main">
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <span class="sidebar-title">请求历史</span>
+      <div class="sidebar-actions">
+        <button class="icon-btn" onclick="clearHistory()" title="清空">🗑</button>
+        <button class="icon-btn" onclick="exportHistory()" title="导出">📤</button>
+      </div>
+    </div>
+    <div class="history-list" id="historyList"></div>
+  </div>
+  <div class="editor-panel">
+    <div class="url-bar">
+      <select class="method-select" id="methodSelect">
+        <option value="GET">GET</option>
+        <option value="POST">POST</option>
+        <option value="PUT">PUT</option>
+        <option value="PATCH">PATCH</option>
+        <option value="DELETE">DELETE</option>
+        <option value="HEAD">HEAD</option>
+        <option value="OPTIONS">OPTIONS</option>
+      </select>
+      <input type="text" class="url-input" id="urlInput" placeholder="https://api.example.com/endpoint" onkeydown="if(event.key==='Enter')sendRequest()">
+      <button class="send-btn" id="sendBtn" onclick="sendRequest()">发送</button>
+    </div>
+    <div class="sub-tabs">
+      <div class="sub-tab active" onclick="showTab('params')">参数 <span class="badge" id="paramsCount"></span></div>
+      <div class="sub-tab" onclick="showTab('headers')">Headers <span class="badge" id="headersCount"></span></div>
+      <div class="sub-tab" onclick="showTab('body')">Body</div>
+      <div class="sub-tab" onclick="showTab('auth')">认证</div>
+    </div>
+    <div class="content-area">
+      <div class="tab-content active" id="tab-params">
+        <div id="paramsContainer"></div>
+        <button class="add-row-btn" onclick="addParam()">+ 添加参数</button>
+      </div>
+      <div class="tab-content" id="tab-headers">
+        <div id="headersContainer"></div>
+        <button class="add-row-btn" onclick="addHeader()">+ 添加请求头</button>
+      </div>
+      <div class="tab-content" id="tab-body">
+        <textarea class="raw-editor" id="bodyEditor" placeholder='{"key": "value"}'></textarea>
+      </div>
+      <div class="tab-content" id="tab-auth">
+        <div style="padding: 12px 0;">
+          <div style="margin-bottom: 16px;">
+            <label style="font-size: 13px; font-weight: 600; color: var(--text2); display: block; margin-bottom: 8px;">认证类型</label>
+            <select class="method-select" id="authType" onchange="toggleAuthFields()" style="min-width: 160px;">
+              <option value="none">无</option>
+              <option value="bearer">Bearer Token</option>
+              <option value="basic">Basic Auth</option>
+              <option value="apikey">API Key</option>
+            </select>
+          </div>
+          <div id="authFields"></div>
+        </div>
+      </div>
+    </div>
+    <div class="response-area">
+      <div class="response-header">
+        <div id="responseStatus"></div>
+        <div class="response-meta" id="responseMeta"></div>
+      </div>
+      <div class="response-tabs">
+        <div class="resp-tab active" onclick="showRespTab('body')">响应体</div>
+        <div class="resp-tab" onclick="showRespTab('headers')">响应头</div>
+      </div>
+      <div class="response-body" id="responseBody">
+        <div class="empty-state">
+          <div class="empty-icon">📡</div>
+          <div class="empty-title">还没有发送请求</div>
+          <div class="empty-desc">输入 URL 并点击发送，开始调试你的 API</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="loadingOverlay" class="loading-overlay" style="display:none">
+  <div class="loading-card">
+    <div class="spinner"></div>
+    <div class="loading-title">发送请求中...</div>
+    <div class="loading-url" id="loadingUrl"></div>
+  </div>
+</div>
+<script>
+const STORAGE_KEY = 'api-console-history';
+const MAX_HISTORY = 50;
+
+let state = {
+  history: [],
+  currentReq: null,
+  currentResp: null,
+  activeTab: 'params',
+  respTab: 'body',
+  activePanel: 'request',
+  env: {}
+};
+
+function init() {
+  loadHistory();
+  addParam();
+  addHeader();
+  renderHistory();
+  showEmpty();
+}
+
+function loadHistory() {
+  try {
+    const data = localStorage.getItem(STORAGE_KEY);
+    if (data) state.history = JSON.parse(data);
+  } catch(e) {}
+  try {
+    const envData = localStorage.getItem('api-console-env');
+    if (envData) state.env = JSON.parse(envData);
+  } catch(e) {}
+}
+
+function saveHistory() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.history));
+}
+
+function saveEnv() {
+  localStorage.setItem('api-console-env', JSON.stringify(state.env));
+}
+
+function addParam() {
+  const container = document.getElementById('paramsContainer');
+  const row = document.createElement('div');
+  row.className = 'key-value-row';
+  row.innerHTML = '<input class="kv-input" placeholder="参数名" onchange="updateParamsCount()"><input class="kv-input" placeholder="参数值"><button class="kv-del" onclick="this.parentElement.remove();updateParamsCount()">×</button>';
+  container.appendChild(row);
+  updateParamsCount();
+}
+
+function addHeader() {
+  const container = document.getElementById('headersContainer');
+  const row = document.createElement('div');
+  row.className = 'key-value-row';
+  row.innerHTML = '<input class="kv-input" placeholder="Header 名" onchange="updateHeadersCount()"><input class="kv-input" placeholder="Header 值"><button class="kv-del" onclick="this.parentElement.remove();updateHeadersCount()">×</button>';
+  container.appendChild(row);
+  updateHeadersCount();
+}
+
+function updateParamsCount() {
+  const count = document.querySelectorAll('#paramsContainer .key-value-row').length;
+  document.getElementById('paramsCount').textContent = count || '';
+}
+
+function updateHeadersCount() {
+  const count = document.querySelectorAll('#headersContainer .key-value-row').length;
+  document.getElementById('headersCount').textContent = count || '';
+}
+
+function showTab(tab) {
+  document.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('tab-' + tab).classList.add('active');
+  state.activeTab = tab;
+}
+
+function showRespTab(tab) {
+  document.querySelectorAll('.resp-tab').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  if (tab === 'headers' && state.currentResp) {
+    renderResponseHeaders(state.currentResp.headers);
+  } else if (state.currentResp) {
+    renderResponseBody(state.currentResp);
+  }
+}
+
+function showPanel(panel) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  state.activePanel = panel;
+}
+
+function showEmpty() {
+  document.getElementById('responseStatus').innerHTML = '';
+  document.getElementById('responseMeta').innerHTML = '';
+  document.getElementById('responseBody').innerHTML = '<div class="empty-state"><div class="empty-icon">📡</div><div class="empty-title">还没有发送请求</div><div class="empty-desc">输入 URL 并点击发送，开始调试你的 API</div></div>';
+}
+
+async function sendRequest() {
+  const method = document.getElementById('methodSelect').value;
+  let url = document.getElementById('urlInput').value.trim();
+  if (!url) { alert('请输入 URL'); return; }
+  if (!url.startsWith('http')) url = 'https://' + url;
+  
+  const params = {};
+  document.querySelectorAll('#paramsContainer .key-value-row').forEach(row => {
+    const inputs = row.querySelectorAll('input');
+    if (inputs[0].value) params[inputs[0].value] = inputs[1].value;
+  });
+  const queryString = new URLSearchParams(params).toString();
+  if (queryString) url += (url.includes('?') ? '&' : '?') + queryString;
+
+  const headers = {};
+  document.querySelectorAll('#headersContainer .key-value-row').forEach(row => {
+    const inputs = row.querySelectorAll('input');
+    if (inputs[0].value) headers[inputs[0].value] = inputs[1].value;
+  });
+
+  const authType = document.getElementById('authType').value;
+  if (authType === 'bearer') {
+    const token = document.getElementById('authToken')?.value;
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+  } else if (authType === 'basic') {
+    const user = document.getElementById('authUser')?.value;
+    const pass = document.getElementById('authPass')?.value;
+    if (user) headers['Authorization'] = 'Basic ' + btoa(user + ':' + pass);
+  } else if (authType === 'apikey') {
+    const keyName = document.getElementById('authKeyName')?.value;
+    const keyValue = document.getElementById('authKeyValue')?.value;
+    if (keyName && keyValue) headers[keyName] = keyValue;
+  }
+
+  let body = null;
+  if (method !== 'GET' && method !== 'HEAD') {
+    const bodyText = document.getElementById('bodyEditor').value.trim();
+    if (bodyText) {
+      body = bodyText;
+      if (!headers['Content-Type']) headers['Content-Type'] = 'application/json';
+    }
+  }
+
+  const req = { method, url, headers, body, timestamp: Date.now() };
+  state.currentReq = req;
+
+  document.getElementById('loadingOverlay').style.display = 'flex';
+  document.getElementById('loadingUrl').textContent = url;
+
+  const startTime = Date.now();
+  try {
+    const resp = await fetch(url, { method, headers: Object.entries(headers).reduce((acc, [k,v]) => { acc[k]=v; return acc; }, {}), body });
+    const elapsed = Date.now() - startTime;
+    const respText = await resp.text();
+    const respHeaders = {};
+    resp.headers.forEach((v, k) => respHeaders[k] = v);
+    const contentType = resp.headers.get('content-type') || '';
+    let formatted = respText;
+    try {
+      const json = JSON.parse(respText);
+      formatted = JSON.stringify(json, null, 2);
+    } catch(e) {}
+    state.currentResp = { status: resp.status, statusText: resp.statusText, headers: respHeaders, body: formatted, time: elapsed, size: new Blob([respText]).size, contentType };
+    renderResponse();
+    addToHistory(req, state.currentResp);
+  } catch(e) {
+    state.currentResp = { error: e.message };
+    renderError(e.message);
+    addToHistory(req, null);
+  }
+  document.getElementById('loadingOverlay').style.display = 'none';
+}
+
+function renderResponse() {
+  const r = state.currentResp;
+  const statusClass = r.status < 300 ? 'status-2xx' : r.status < 400 ? 'status-3xx' : r.status < 500 ? 'status-4xx' : 'status-5xx';
+  document.getElementById('responseStatus').innerHTML = `<span class="status-badge ${statusClass}">${r.status} ${r.statusText}</span>`;
+  document.getElementById('responseMeta').innerHTML = `
+    <span>⏱ ${r.time}ms</span>
+    <span>📦 ${formatSize(r.size)}</span>
+    <span>📄 ${r.contentType.split(';')[0] || 'unknown'}</span>
+  `;
+  renderResponseBody(r);
+}
+
+function renderResponseBody(r) {
+  const highlighted = highlightSyntax(r.body);
+  document.getElementById('responseBody').innerHTML = `<pre>${highlighted}</pre>`;
+}
+
+function renderResponseHeaders(headers) {
+  let html = '<table style="width:100%;border-collapse:collapse;font-family:\'JetBrains Mono\',monospace;font-size:12px">';
+  for (const [k, v] of Object.entries(headers)) {
+    html += `<tr style="border-bottom:1px solid var(--border)"><td style="padding:8px 12px;color:var(--accent);white-space:nowrap">${k}</td><td style="padding:8px 12px;color:var(--text2);word-break:break-all">${v}</td></tr>`;
+  }
+  html += '</table>';
+  document.getElementById('responseBody').innerHTML = html;
+}
+
+function renderError(msg) {
+  document.getElementById('responseStatus').innerHTML = `<span class="status-badge status-5xx">错误</span>`;
+  document.getElementById('responseMeta').innerHTML = `<span>⚠ ${msg}</span>`;
+  document.getElementById('responseBody').innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div><div class="empty-title">请求失败</div><div class="empty-desc">${msg}</div></div>`;
+}
+
+function highlightSyntax(text) {
+  if (!text) return '';
+  return text
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, (match) => {
+      let cls = 'color:#79c0ff';
+      if (/^"/.test(match)) { cls = match.endsWith(':') ? 'color:#7ee787' : 'color:#a5d6ff'; }
+      else if (/true|false/.test(match)) cls = 'color:#ff7b72';
+      else if (/null/.test(match)) cls = 'color:#ff7b72';
+      else cls = 'color:#ffa657';
+      return `<span style="${cls}">${match}</span>`;
+    });
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024*1024) return (bytes/1024).toFixed(1) + ' KB';
+  return (bytes/1024/1024).toFixed(1) + ' MB';
+}
+
+function addToHistory(req, resp) {
+  const entry = { id: Date.now(), req, resp: resp ? { status: resp.status, statusText: resp.statusText, time: resp.time, size: resp.size } : null };
+  state.history.unshift(entry);
+  if (state.history.length > MAX_HISTORY) state.history.pop();
+  saveHistory();
+  renderHistory();
+}
+
+function renderHistory() {
+  const list = document.getElementById('historyList');
+  if (state.history.length === 0) {
+    list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text2);font-size:13px">暂无历史记录</div>';
+    return;
+  }
+  list.innerHTML = state.history.map(h => {
+    const m = h.req.method.toLowerCase();
+    const statusHtml = h.resp ? `<span class="history-status">${h.resp.status} · ${h.resp.time}ms</span>` : '<span class="history-status" style="color:var(--red)">失败</span>';
+    return `<div class="history-item" onclick="loadHistoryItem(${h.id})">
+      <span class="history-method method-${m}">${h.req.method}</span>
+      <span class="history-url">${h.req.url}</span>
+      ${statusHtml}
+    </div>`;
+  }).join('');
+}
+
+function loadHistoryItem(id) {
+  const item = state.history.find(h => h.id === id);
+  if (!item) return;
+  document.getElementById('methodSelect').value = item.req.method;
+  document.getElementById('urlInput').value = item.req.url;
+  if (item.req.body) document.getElementById('bodyEditor').value = item.req.body;
+  if (item.resp) {
+    state.currentResp = item.resp;
+    state.currentResp.body = item.resp.body || '';
+    renderResponse();
+  } else {
+    renderError('历史请求无响应数据');
+  }
+}
+
+function clearHistory() {
+  if (!confirm('确定清空所有历史记录？')) return;
+  state.history = [];
+  saveHistory();
+  renderHistory();
+  showEmpty();
+}
+
+function exportHistory() {
+  const data = JSON.stringify(state.history, null, 2);
+  const blob = new Blob([data], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'api-console-history-' + Date.now() + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function toggleAuthFields() {
+  const type = document.getElementById('authType').value;
+  const fields = document.getElementById('authFields');
+  if (type === 'bearer') {
+    fields.innerHTML = '<div><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:6px">Token</label><input class="kv-input" id="authToken" placeholder="Bearer token" style="width:100%"></div>';
+  } else if (type === 'basic') {
+    fields.innerHTML = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:6px">用户名</label><input class="kv-input" id="authUser" placeholder="Username" style="width:100%"></div><div><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:6px">密码</label><input class="kv-input" id="authPass" type="password" placeholder="Password" style="width:100%"></div></div>';
+  } else if (type === 'apikey') {
+    fields.innerHTML = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:6px">Key 名称</label><input class="kv-input" id="authKeyName" placeholder="X-API-Key" style="width:100%"></div><div><label style="font-size:12px;color:var(--text2);display:block;margin-bottom:6px">Key 值</label><input class="kv-input" id="authKeyValue" placeholder="your-api-key" style="width:100%"></div></div>';
+  } else {
+    fields.innerHTML = '';
+  }
+}
+
+init();
+</script>
+</body>
+</html>

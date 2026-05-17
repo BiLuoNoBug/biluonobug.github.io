@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>终端风格博客</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #0a0a0f;
+  --term-green: #00ff9f;
+  --term-amber: #ffb800;
+  --term-cyan: #00d4ff;
+  --term-magenta: #ff00ff;
+  --term-red: #ff3366;
+  --dim: #3a3a4a;
+}
+
+body {
+  background: var(--bg);
+  color: var(--term-green);
+  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Scanlines overlay */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.1) 2px,
+    rgba(0, 0, 0, 0.1) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* CRT glow effect */
+body::after {
+  content: '';
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: radial-gradient(ellipse at center, transparent 0%, rgba(0,0,0,0.4) 100%);
+  pointer-events: none;
+  z-index: 9998;
+}
+
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 40px 20px;
+}
+
+/* Header */
+.header {
+  border: 1px solid var(--term-green);
+  padding: 20px;
+  margin-bottom: 20px;
+  position: relative;
+  box-shadow: 0 0 20px rgba(0, 255, 159, 0.2), inset 0 0 20px rgba(0, 255, 159, 0.05);
+}
+
+.header::before {
+  content: '[ SYSTEM INFO ]';
+  position: absolute;
+  top: -10px;
+  left: 20px;
+  background: var(--bg);
+  padding: 0 10px;
+  font-size: 12px;
+  color: var(--term-amber);
+}
+
+.header h1 {
+  font-size: 24px;
+  font-weight: 700;
+  text-shadow: 0 0 10px var(--term-green);
+  margin-bottom: 8px;
+}
+
+.header .subtitle {
+  color: var(--dim);
+  font-size: 13px;
+}
+
+.header .datetime {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  color: var(--term-cyan);
+  font-size: 12px;
+}
+
+/* Terminal window */
+.terminal {
+  border: 1px solid var(--term-green);
+  background: rgba(0, 255, 159, 0.02);
+  box-shadow: 0 0 30px rgba(0, 255, 159, 0.1);
+}
+
+.terminal-header {
+  background: rgba(0, 255, 159, 0.1);
+  padding: 10px 15px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid rgba(0, 255, 159, 0.3);
+}
+
+.terminal-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.dot-red { background: #ff5f56; }
+.dot-yellow { background: #ffbd2e; }
+.dot-green { background: #27ca40; }
+
+.terminal-title {
+  margin-left: 10px;
+  font-size: 12px;
+  color: var(--term-amber);
+}
+
+.terminal-body {
+  padding: 20px;
+  min-height: 400px;
+}
+
+/* Prompt */
+.prompt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 15px;
+}
+
+.prompt-user {
+  color: var(--term-cyan);
+}
+
+.prompt-path {
+  color: var(--term-amber);
+}
+
+.prompt-symbol {
+  color: var(--term-green);
+}
+
+/* Navigation menu */
+.nav-menu {
+  margin-bottom: 20px;
+}
+
+.nav-item {
+  padding: 8px 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: all 0.15s;
+  border-left: 2px solid transparent;
+  padding-left: 10px;
+}
+
+.nav-item:hover, .nav-item.active {
+  background: rgba(0, 255, 159, 0.05);
+  border-left-color: var(--term-green);
+  color: #fff;
+  text-shadow: 0 0 5px var(--term-green);
+}
+
+.nav-icon {
+  color: var(--term-amber);
+  width: 20px;
+  text-align: center;
+}
+
+.nav-label {
+  flex: 1;
+}
+
+.nav-arrow {
+  color: var(--dim);
+  transition: transform 0.15s;
+}
+
+.nav-item:hover .nav-arrow, .nav-item.active .nav-arrow {
+  color: var(--term-green);
+  transform: translateX(5px);
+}
+
+/* Content area */
+.content-area {
+  border-top: 1px dashed rgba(0, 255, 159, 0.3);
+  padding-top: 20px;
+  margin-top: 20px;
+}
+
+.content-title {
+  font-size: 18px;
+  color: var(--term-cyan);
+  margin-bottom: 15px;
+  text-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
+}
+
+.content-meta {
+  font-size: 12px;
+  color: var(--dim);
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(0, 255, 159, 0.1);
+}
+
+.content-body {
+  font-size: 14px;
+  line-height: 1.8;
+  color: #b0b0c0;
+}
+
+.content-body p {
+  margin-bottom: 15px;
+}
+
+.content-body code {
+  background: rgba(0, 255, 159, 0.1);
+  padding: 2px 6px;
+  border-radius: 3px;
+  color: var(--term-amber);
+}
+
+.content-body pre {
+  background: rgba(0, 0, 0, 0.5);
+  padding: 15px;
+  margin: 15px 0;
+  overflow-x: auto;
+  border-left: 3px solid var(--term-green);
+}
+
+/* Help panel */
+.help-panel {
+  background: rgba(0, 255, 159, 0.03);
+  border: 1px solid rgba(0, 255, 159, 0.2);
+  padding: 15px;
+  font-size: 12px;
+}
+
+.help-title {
+  color: var(--term-amber);
+  margin-bottom: 10px;
+}
+
+.help-row {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 5px;
+}
+
+.help-key {
+  color: var(--term-cyan);
+  min-width: 80px;
+}
+
+.help-desc {
+  color: var(--dim);
+}
+
+/* Footer */
+.footer {
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(0, 255, 159, 0.2);
+  text-align: center;
+  font-size: 11px;
+  color: var(--dim);
+}
+
+/* Blinking cursor */
+.cursor {
+  display: inline-block;
+  width: 10px;
+  height: 18px;
+  background: var(--term-green);
+  animation: blink 1s step-end infinite;
+  vertical-align: middle;
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+/* Typing animation */
+.typing-text {
+  overflow: hidden;
+  white-space: nowrap;
+  animation: typing 0.5s steps(20, end);
+}
+
+@keyframes typing {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+/* Article list */
+.article-list {
+  margin: 10px 0;
+}
+
+.article-item {
+  padding: 10px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-bottom: 5px;
+}
+
+.article-item:hover {
+  border-color: var(--term-green);
+  background: rgba(0, 255, 159, 0.05);
+}
+
+.article-title {
+  color: var(--term-green);
+  font-size: 14px;
+}
+
+.article-date {
+  color: var(--dim);
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+/* Tags */
+.tag {
+  display: inline-block;
+  padding: 2px 8px;
+  background: rgba(255, 184, 0, 0.1);
+  border: 1px solid rgba(255, 184, 0, 0.3);
+  color: var(--term-amber);
+  font-size: 10px;
+  margin-right: 5px;
+  margin-bottom: 5px;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .container { padding: 20px 10px; }
+  .header h1 { font-size: 18px; }
+  .header .datetime { display: none; }
+  .terminal-body { padding: 15px; min-height: 300px; }
+  .content-body { font-size: 13px; }
+  .help-row { flex-direction: column; gap: 5px; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>~/blog</h1>
+    <div class="subtitle">终端风格博客 · Terminal Blog</div>
+    <div class="datetime" id="datetime"></div>
+  </div>
+
+  <div class="terminal">
+    <div class="terminal-header">
+      <span class="terminal-dot dot-red"></span>
+      <span class="terminal-dot dot-yellow"></span>
+      <span class="terminal-dot dot-green"></span>
+      <span class="terminal-title">blog@localhost — bash</span>
+    </div>
+    <div class="terminal-body">
+      <div class="prompt">
+        <span class="prompt-user">visitor</span>
+        <span>@</span>
+        <span class="prompt-path">~/blog</span>
+        <span class="prompt-symbol">$</span>
+        <span>ls -la</span>
+      </div>
+
+      <nav class="nav-menu" id="navMenu">
+        <div class="nav-item active" data-section="home">
+          <span class="nav-icon">📁</span>
+          <span class="nav-label">~/home</span>
+          <span class="nav-arrow">→</span>
+        </div>
+        <div class="nav-item" data-section="articles">
+          <span class="nav-icon">📄</span>
+          <span class="nav-label">~/articles</span>
+          <span class="nav-arrow">→</span>
+        </div>
+        <div class="nav-item" data-section="about">
+          <span class="nav-icon">👤</span>
+          <span class="nav-label">~/about</span>
+          <span class="nav-arrow">→</span>
+        </div>
+        <div class="nav-item" data-section="projects">
+          <span class="nav-icon">🚀</span>
+          <span class="nav-label">~/projects</span>
+          <span class="nav-arrow">→</span>
+        </div>
+      </nav>
+
+      <div class="content-area" id="contentArea">
+        <!-- Dynamic content here -->
+      </div>
+    </div>
+  </div>
+
+  <div class="help-panel">
+    <div class="help-title">键盘快捷键 / Keyboard Shortcuts</div>
+    <div class="help-row">
+      <span class="help-key">↑ / ↓</span>
+      <span class="help-desc">导航菜单 Navigate</span>
+      <span class="help-key">Enter</span>
+      <span class="help-desc">选择 Enter</span>
+      <span class="help-key">Tab</span>
+      <span class="help-desc">切换 Switch</span>
+      <span class="help-key">Esc</span>
+      <span class="help-desc">返回主页 Home</span>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span>© 2024 Terminal Blog · 使用 ↑↓ 键导航 · Press arrow keys to navigate</span>
+    <span class="cursor"></span>
+  </div>
+</div>
+
+<script>
+// Blog data
+const blogData = {
+  home: {
+    title: '欢迎来到终端博客',
+    content: `
+      <p>你好，陌生人。这是一个<span style="color: var(--term-amber);">复古终端风格</span>的个人博客。</p>
+      <p>在这个博客里，你可以：</p>
+      <pre>
+  📁 查看所有文章
+  👤 了解作者信息  
+  🚀 探索项目作品
+  🔍 使用键盘快捷键导航</pre>
+      <p style="color: var(--term-cyan);">💡 提示：使用 <code>↑</code> <code>↓</code> 键导航，<code>Enter</code> 进入，<code>Esc</code> 返回。</p>
+    `
+  },
+  articles: {
+    title: '文章列表 / Articles',
+    content: `
+      <div class="article-list">
+        <div class="article-item" onclick="showArticle(0)">
+          <div class="article-title">▶ 使用 CSS Grid 创建响应式布局</div>
+          <div class="article-date">2024-03-15 · 标签: <span class="tag">CSS</span><span class="tag">布局</span></div>
+        </div>
+        <div class="article-item" onclick="showArticle(1)">
+          <div class="article-title">▶ JavaScript 异步编程完全指南</div>
+          <div class="article-date">2024-02-28 · 标签: <span class="tag">JavaScript</span><span class="tag">异步</span></div>
+        </div>
+        <div class="article-item" onclick="showArticle(2)">
+          <div class="article-title">▶ WebAssembly 入门：性能革命的起点</div>
+          <div class="article-date">2024-02-10 · 标签: <span class="tag">WebAssembly</span><span class="tag">性能</span></div>
+        </div>
+        <div class="article-item" onclick="showArticle(3)">
+          <div class="article-title">▶ 从零构建一个 CLI 工具</div>
+          <div class="article-date">2024-01-20 · 标签: <span class="tag">Node.js</span><span class="tag">CLI</span></div>
+        </div>
+      </div>
+      <p style="color: var(--dim); margin-top: 15px;">📂 共 4 篇文章 · Click to read</p>
+    `
+  },
+  about: {
+    title: '关于我 / About',
+    content: `
+      <p style="color: var(--term-cyan);">$ whoami</p>
+      <pre>
+  名称: 程序员 / Developer
+  位置: 地球 · Earth
+  专长: 全栈开发 / 全栈开发
+  
+  💼 工作:
+     - 前端开发 (React, Vue, Angular)
+     - 后端开发 (Node.js, Python, Go)
+     - 云原生 (Docker, K8s, AWS)
+  
+  🎯 兴趣:
+     - 开源贡献
+     - 技术写作
+     - 终端美学
+     - 复古计算</pre>
+      <p style="color: var(--term-amber);">"代码即艺术，终端即归宿"</p>
+    `
+  },
+  projects: {
+    title: '项目作品 / Projects',
+    content: `
+      <div class="article-list">
+        <div class="article-item">
+          <div class="article-title">🌟 terminal-blog</div>
+          <div class="article-date">终端风格博客主题 · 120+ stars</div>
+        </div>
+        <div class="article-item">
+          <div class="article-title">⚡ fast-cli</div>
+          <div class="article-date">Node.js CLI 脚手架工具 · 500+ weekly downloads</div>
+        </div>
+        <div class="article-item">
+          <div class="article-title">🎮 web-game-engine</div>
+          <div class="article-date">轻量级 2D 游戏引擎 · WebGL 驱动</div>
+        </div>
+        <div class="article-item">
+          <div class="article-title">📊 data-visualizer</div>
+          <div class="article-date">数据可视化组件库 · 50+ 图表类型</div>
+        </div>
+      </div>
+      <p style="color: var(--dim); margin-top: 15px;">🔗 <a href="https://github.com" style="color: var(--term-green);" target="_blank">GitHub Profile</a></p>
+    `
+  }
+};
+
+const articles = [
+  {
+    title: '使用 CSS Grid 创建响应式布局',
+    date: '2024-03-15',
+    tags: ['CSS', '布局', '响应式'],
+    content: `
+      <p><span style="color: var(--term-amber);"># CSS Grid 布局入门</span></p>
+      <p>CSS Grid 是现代 CSS 布局的重要组成部分，它让我们能够创建复杂的两维布局。</p>
+      <pre>
+.container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.item {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 10px;
+  padding: 20px;
+}</pre>
+      <p>关键优势：</p>
+      <p>• <span style="color: var(--term-green);">简单语法</span> - 一行定义复杂布局</p>
+      <p>• <span style="color: var(--term-cyan);">响应式</span> - 自动适应屏幕尺寸</p>
+      <p>• <span style="color: var(--term-magenta);">灵活</span> - 支持任意对齐方式</p>
+    `
+  },
+  {
+    title: 'JavaScript 异步编程完全指南',
+    date: '2024-02-28',
+    tags: ['JavaScript', '异步', 'Promise'],
+    content: `
+      <p><span style="color: var(--term-amber);"># JavaScript 异步编程</span></p>
+      <p>从回调地狱到 Promise，再到 async/await，JavaScript 的异步编程经历了巨大进化。</p>
+      <pre>
+// 现代异步写法
+async function fetchData(url) {
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    return data;
+  } catch (err) {
+    console.error('Error:', err);
+  }
+}</pre>
+      <p>async/await 的优势：</p>
+      <p>• <span style="color: var(--term-green);">可读性</span> - 像同步代码一样阅读</p>
+      <p>• <span style="color: var(--term-cyan);">错误处理</span> - 使用 try/catch</p>
+      <p>• <span style="color: var(--term-magenta);">调试</span> - 更好的堆栈跟踪</p>
+    `
+  },
+  {
+    title: 'WebAssembly 入门：性能革命的起点',
+    date: '2024-02-10',
+    tags: ['WebAssembly', '性能', 'WASM'],
+    content: `
+      <p><span style="color: var(--term-amber);"># WebAssembly 简介</span></p>
+      <p>WebAssembly (WASM) 是一种低级字节码格式，可以在浏览器中以接近原生的速度运行。</p>
+      <pre>
+// C/C++ 编译到 WASM
+// main.c
+#include &lt;emscripten.h&gt;
+
+EMSCRIPTEN_KEEPALIVE
+int add(int a, int b) {
+    return a + b;
+}
+
+// 编译: emcc main.c -o main.js</pre>
+      <p>使用场景：</p>
+      <p>• <span style="color: var(--term-green);">游戏</span> - 性能敏感的 3D 游戏</p>
+      <p>• <span style="color: var(--term-cyan);">音视频</span> - 实时编解码处理</p>
+      <p>• <span style="color: var(--term-magenta);">科学计算</span> - 大规模数据处理</p>
+    `
+  },
+  {
+    title: '从零构建一个 CLI 工具',
+    date: '2024-01-20',
+    tags: ['Node.js', 'CLI', '命令行'],
+    content: `
+      <p><span style="color: var(--term-amber);"># 构建 Node.js CLI 工具</span></p>
+      <p>命令行工具是每个开发者必备的技能。让我们从零开始构建一个有用的 CLI 应用。</p>
+      <pre>
+// bin/cli.js - CLI 入口
+#!/usr/bin/env node
+
+import commander from 'commander';
+import chalk from 'chalk';
+
+commander
+  .name('mycli')
+  .description('一个很酷的命令行工具')
+  .version('1.0.0')
+  .option('-n, --name <name>', '设置名称')
+  .parse();
+
+console.log(chalk.cyan('Hello, ' + (commander.name || 'World') + '!'));</pre>
+      <p>package.json 配置：</p>
+      <pre>
+{
+  "name": "mycli",
+  "bin": {
+    "mycli": "./bin/cli.js"
+  }
+}</pre>
+      <p>安装后即可全局使用 <code>mycli</code> 命令。</p>
+    `
+  }
+];
+
+let currentSection = 'home';
+let currentNavIndex = 0;
+const navItems = document.querySelectorAll('.nav-item');
+
+// Initialize
+updateDateTime();
+showContent('home');
+
+// Update datetime
+function updateDateTime() {
+  const now = new Date();
+  const formatted = now.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  }).replace(/\//g, '-');
+  document.getElementById('datetime').textContent = formatted;
+}
+setInterval(updateDateTime, 1000);
+
+// Show content
+function showContent(section) {
+  currentSection = section;
+  const data = blogData[section];
+  const contentArea = document.getElementById('contentArea');
+  
+  contentArea.innerHTML = `
+    <div class="content-title">${data.title}</div>
+    <div class="content-body">${data.content}</div>
+  `;
+}
+
+// Show article
+function showArticle(index) {
+  const article = articles[index];
+  const contentArea = document.getElementById('contentArea');
+  
+  contentArea.innerHTML = `
+    <div class="content-title">📄 ${article.title}</div>
+    <div class="content-meta">
+      📅 ${article.date} · ${article.tags.map(t => `<span class="tag">${t}</span>`).join('')}
+    </div>
+    <div class="content-body">${article.content}</div>
+    <div style="margin-top: 20px; padding-top: 15px; border-top: 1px dashed rgba(0,255,159,0.3);">
+      <span style="color: var(--term-amber); cursor: pointer;" onclick="showContent('articles')">← 返回文章列表</span>
+    </div>
+  `;
+}
+
+// Keyboard navigation
+document.addEventListener('keydown', (e) => {
+  const navCount = navItems.length;
+  
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    navItems[currentNavIndex].classList.remove('active');
+    currentNavIndex = (currentNavIndex + 1) % navCount;
+    navItems[currentNavIndex].classList.add('active');
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    navItems[currentNavIndex].classList.remove('active');
+    currentNavIndex = (currentNavIndex - 1 + navCount) % navCount;
+    navItems[currentNavIndex].classList.add('active');
+  } else if (e.key === 'Enter') {
+    const section = navItems[currentNavIndex].dataset.section;
+    showContent(section);
+    // Update active state in content
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.classList.toggle('active', item.dataset.section === section);
+    });
+    // Reset nav index
+    const newIndex = Array.from(navItems).findIndex(item => item.dataset.section === section);
+    currentNavIndex = newIndex >= 0 ? newIndex : 0;
+  } else if (e.key === 'Tab') {
+    e.preventDefault();
+    // Switch to next section directly
+    const sections = ['home', 'articles', 'about', 'projects'];
+    const currentIdx = sections.indexOf(currentSection);
+    const nextIdx = (currentIdx + 1) % sections.length;
+    showContent(sections[nextIdx]);
+    // Update nav
+    navItems.forEach(item => {
+      item.classList.toggle('active', item.dataset.section === sections[nextIdx]);
+    });
+    currentNavIndex = nextIdx;
+  } else if (e.key === 'Escape') {
+    showContent('home');
+    navItems.forEach(item => {
+      item.classList.toggle('active', item.dataset.section === 'home');
+    });
+    currentNavIndex = 0;
+  }
+});
+
+// Click on nav items
+navItems.forEach((item, index) => {
+  item.addEventListener('click', () => {
+    navItems.forEach(i => i.classList.remove('active'));
+    item.classList.add('active');
+    currentNavIndex = index;
+    showContent(item.dataset.section);
+  });
+});
+
+// Mouse hover on nav items
+navItems.forEach((item, index) => {
+  item.addEventListener('mouseenter', () => {
+    navItems.forEach(i => i.classList.remove('active'));
+    item.classList.add('active');
+  });
+  item.addEventListener('mouseleave', () => {
+    navItems.forEach(i => i.classList.remove('active'));
+    navItems[currentNavIndex].classList.add('active');
+  });
+});
+</script>
+</body>
+</html>

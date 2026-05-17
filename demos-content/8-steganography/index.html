@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>图片隐写术工具</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@400;500;600&display=swap');
+  
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --surface2: #1a1a25;
+    --border: #2a2a3a;
+    --accent: #7c3aed;
+    --accent2: #a855f7;
+    --accent-glow: rgba(124, 58, 237, 0.3);
+    --text: #e2e8f0;
+    --text-dim: #64748b;
+    --success: #10b981;
+    --error: #ef4444;
+  }
+  
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  
+  .bg-grid {
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image: 
+      linear-gradient(rgba(124,58,237,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(124,58,237,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+  
+  .container {
+    position: relative; z-index: 1;
+    max-width: 900px; margin: 0 auto; padding: 40px 20px;
+  }
+  
+  header {
+    text-align: center; margin-bottom: 48px;
+  }
+  
+  .logo {
+    display: inline-flex; align-items: center; gap: 12px;
+    margin-bottom: 16px;
+  }
+  
+  .logo-icon {
+    width: 48px; height: 48px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 8px 32px var(--accent-glow);
+  }
+  
+  .logo-icon svg { width: 26px; height: 26px; fill: white; }
+  
+  h1 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 2rem; font-weight: 700;
+    background: linear-gradient(135deg, #e2e8f0, #a855f7);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    margin-bottom: 8px;
+  }
+  
+  .subtitle {
+    color: var(--text-dim); font-size: 0.95rem;
+    letter-spacing: 0.5px;
+  }
+  
+  .tabs {
+    display: flex; gap: 8px; margin-bottom: 28px;
+    background: var(--surface); border-radius: 14px;
+    padding: 6px; border: 1px solid var(--border);
+  }
+  
+  .tab {
+    flex: 1; padding: 10px 16px;
+    border: none; background: transparent;
+    color: var(--text-dim); font-size: 0.9rem; font-weight: 500;
+    cursor: pointer; border-radius: 10px;
+    transition: all 0.2s;
+    font-family: inherit;
+  }
+  
+  .tab:hover { color: var(--text); }
+  
+  .tab.active {
+    background: var(--accent);
+    color: white;
+    box-shadow: 0 4px 16px var(--accent-glow);
+  }
+  
+  .panel { display: none; }
+  .panel.active { display: block; }
+  
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    margin-bottom: 20px;
+  }
+  
+  .card-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85rem; font-weight: 600;
+    color: var(--text-dim); text-transform: uppercase;
+    letter-spacing: 1px; margin-bottom: 16px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  
+  .card-title::before {
+    content: '';
+    width: 4px; height: 16px;
+    background: linear-gradient(180deg, var(--accent), var(--accent2));
+    border-radius: 2px;
+  }
+  
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 40px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.25s;
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .drop-zone::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(135deg, var(--accent-glow), transparent);
+    opacity: 0; transition: opacity 0.25s;
+  }
+  
+  .drop-zone:hover, .drop-zone.dragover {
+    border-color: var(--accent);
+    background: rgba(124,58,237,0.05);
+  }
+  
+  .drop-zone:hover::after, .drop-zone.dragover::after { opacity: 1; }
+  
+  .drop-icon {
+    font-size: 2.5rem; margin-bottom: 12px;
+    display: block;
+  }
+  
+  .drop-text { color: var(--text-dim); font-size: 0.9rem; }
+  .drop-text strong { color: var(--accent2); }
+  
+  .preview-wrap {
+    margin-top: 16px;
+    display: none;
+    position: relative;
+  }
+  
+  .preview-wrap.show { display: block; }
+  
+  .preview-img {
+    max-width: 100%; max-height: 280px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+  }
+  
+  .preview-meta {
+    margin-top: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem; color: var(--text-dim);
+    display: flex; gap: 16px; flex-wrap: wrap;
+  }
+  
+  .preview-meta span {
+    background: var(--surface2);
+    padding: 3px 10px; border-radius: 6px;
+    border: 1px solid var(--border);
+  }
+  
+  textarea {
+    width: 100%; min-height: 120px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.88rem;
+    padding: 14px;
+    resize: vertical;
+    transition: border-color 0.2s;
+    line-height: 1.6;
+  }
+  
+  textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+  }
+  
+  textarea::placeholder { color: var(--text-dim); }
+  
+  .btn-row {
+    display: flex; gap: 12px; flex-wrap: wrap;
+    margin-top: 20px;
+  }
+  
+  .btn {
+    flex: 1; min-width: 140px;
+    padding: 12px 20px;
+    border: none; border-radius: 10px;
+    font-family: inherit; font-size: 0.9rem; font-weight: 600;
+    cursor: pointer; transition: all 0.2s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: white;
+    box-shadow: 0 4px 20px var(--accent-glow);
+  }
+  
+  .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 28px var(--accent-glow);
+  }
+  
+  .btn-primary:disabled {
+    opacity: 0.5; cursor: not-allowed; transform: none;
+  }
+  
+  .btn-secondary {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  
+  .btn-secondary:hover { background: var(--border); }
+  
+  .btn-download {
+    background: linear-gradient(135deg, var(--success), #059669);
+    color: white;
+    box-shadow: 0 4px 20px rgba(16,185,129,0.25);
+    text-decoration: none;
+  }
+  
+  .btn-download:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 28px rgba(16,185,129,0.35);
+  }
+  
+  .status-bar {
+    margin-top: 16px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    display: none;
+  }
+  
+  .status-bar.show { display: block; }
+  
+  .status-bar.success {
+    background: rgba(16,185,129,0.12);
+    border: 1px solid rgba(16,185,129,0.3);
+    color: var(--success);
+  }
+  
+  .status-bar.error {
+    background: rgba(239,68,68,0.12);
+    border: 1px solid rgba(239,68,68,0.3);
+    color: var(--error);
+  }
+  
+  .capacity-bar {
+    height: 4px; background: var(--border);
+    border-radius: 2px; margin-top: 8px; overflow: hidden;
+  }
+  
+  .capacity-fill {
+    height: 100%; border-radius: 2px;
+    background: linear-gradient(90deg, var(--success), var(--accent2));
+    transition: width 0.4s ease;
+  }
+  
+  .result-section {
+    margin-top: 16px;
+    display: none;
+  }
+  
+  .result-section.show { display: block; }
+  
+  .binary-viz {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    line-height: 1.4;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    max-height: 120px;
+    overflow: auto;
+    word-break: break-all;
+    color: var(--text-dim);
+  }
+  
+  .info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 12px;
+  }
+  
+  .info-box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+  }
+  
+  .info-box .label {
+    font-size: 0.72rem; color: var(--text-dim);
+    margin-bottom: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  
+  .info-box .value {
+    font-size: 1rem; font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  
+  .how-it-works {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    margin-top: 32px;
+  }
+  
+  .how-it-works h3 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.9rem; margin-bottom: 16px;
+    color: var(--text);
+    display: flex; align-items: center; gap: 8px;
+  }
+  
+  .steps {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  }
+  
+  .step {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px;
+  }
+  
+  .step-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem; color: var(--accent2);
+    margin-bottom: 6px; font-weight: 700;
+  }
+  
+  .step-text {
+    font-size: 0.82rem; color: var(--text-dim);
+    line-height: 1.5;
+  }
+  
+  .hidden-input { display: none; }
+  
+  @media (max-width: 600px) {
+    .steps { grid-template-columns: 1fr; }
+    h1 { font-size: 1.5rem; }
+    .info-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="bg-grid"></div>
+<div class="container">
+  <header>
+    <div class="logo">
+      <div class="logo-icon">
+        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.94-.49-7-3.85-7-7.93s3.05-7.44 7-7.93v15.86zm2 0V4.07c3.94.49 7 3.85 7 7.93s-3.05 7.44-7 7.93zM12 8l-4 4h3v4h2v-4h3l-4-4z"/></svg>
+      </div>
+    </div>
+    <h1>图片隐写术工具</h1>
+    <p class="subtitle">把秘密藏进图片里 · LSB 最低有效位编码</p>
+  </header>
+  
+  <div class="tabs">
+    <button class="tab active" data-tab="encode">🔒 编码</button>
+    <button class="tab" data-tab="decode">🔓 解码</button>
+  </div>
+  
+  <div id="encode-panel" class="panel active">
+    <div class="card">
+      <div class="card-title">选择图片</div>
+      <div class="drop-zone" id="encode-drop">
+        <span class="drop-icon">🖼️</span>
+        <p class="drop-text">拖拽图片到这里，或 <strong>点击选择文件</strong></p>
+        <p class="drop-text" style="font-size:0.78rem;margin-top:6px;color:#475569">支持 PNG / BMP（推荐 PNG）</p>
+      </div>
+      <input type="file" class="hidden-input" id="encode-file" accept="image/png,image/bmp">
+      <div class="preview-wrap" id="encode-preview">
+        <img class="preview-img" id="encode-img" alt="preview">
+        <div class="preview-meta" id="encode-meta"></div>
+      </div>
+    </div>
+    
+    <div class="card">
+      <div class="card-title">输入秘密信息</div>
+      <textarea id="secret-text" placeholder="在这里输入你想藏起来的内容..."></textarea>
+      <div id="capacity-info" style="margin-top:8px;">
+        <div style="font-size:0.8rem;color:var(--text-dim);font-family:'JetBrains Mono',monospace;">
+          容量估算：<span id="capacity-text">请先选择图片</span>
+        </div>
+        <div class="capacity-bar"><div class="capacity-fill" id="capacity-fill" style="width:0%"></div></div>
+      </div>
+    </div>
+    
+    <div class="btn-row">
+      <button class="btn btn-primary" id="encode-btn" disabled>
+        <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.94-.49-7-3.85-7-7.93s3.05-7.44 7-7.93v15.86z"/></svg>
+        隐藏信息
+      </button>
+      <button class="btn btn-secondary" id="encode-reset">重置</button>
+    </div>
+    
+    <div class="status-bar" id="encode-status"></div>
+    
+    <div class="result-section" id="encode-result">
+      <div class="card">
+        <div class="card-title">✅ 编码完成</div>
+        <div class="info-grid">
+          <div class="info-box">
+            <div class="label">图片尺寸</div>
+            <div class="value" id="result-size">-</div>
+          </div>
+          <div class="info-box">
+            <div class="label">隐藏字符数</div>
+            <div class="value" id="result-chars">-</div>
+          </div>
+          <div class="info-box">
+            <div class="label">编码位数</div>
+            <div class="value" id="result-bits">-</div>
+          </div>
+          <div class="info-box">
+            <div class="label">每像素编码</div>
+            <div class="value" id="result-ppb">-</div>
+          </div>
+        </div>
+        <div style="margin-top:20px;">
+          <a class="btn btn-download" id="download-btn" download="stego-image.png">
+            ⬇️ 下载隐写图片
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <div id="decode-panel" class="panel">
+    <div class="card">
+      <div class="card-title">选择隐写图片</div>
+      <div class="drop-zone" id="decode-drop">
+        <span class="drop-icon">🔍</span>
+        <p class="drop-text">拖拽隐写图片，或 <strong>点击选择文件</strong></p>
+        <p class="drop-text" style="font-size:0.78rem;margin-top:6px;color:#475569">支持 PNG / BMP</p>
+      </div>
+      <input type="file" class="hidden-input" id="decode-file" accept="image/png,image/bmp">
+      <div class="preview-wrap" id="decode-preview">
+        <img class="preview-img" id="decode-img" alt="preview">
+        <div class="preview-meta" id="decode-meta"></div>
+      </div>
+    </div>
+    
+    <div class="btn-row">
+      <button class="btn btn-primary" id="decode-btn" disabled>
+        <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.94-.49-7-3.85-7-7.93s3.05-7.44 7-7.93v15.86z"/></svg>
+        提取信息
+      </button>
+      <button class="btn btn-secondary" id="decode-reset">重置</button>
+    </div>
+    
+    <div class="status-bar" id="decode-status"></div>
+    
+    <div class="result-section" id="decode-result">
+      <div class="card">
+        <div class="card-title">🔓 提取结果</div>
+        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px;margin-top:8px;">
+          <pre id="decoded-text" style="font-family:'JetBrains Mono',monospace;font-size:0.88rem;white-space:pre-wrap;word-break:break-all;line-height:1.6;color:var(--text);min-height:60px;"></pre>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:12px;">
+          <button class="btn btn-secondary" id="copy-btn" style="flex:1">
+            📋 复制结果
+          </button>
+          <button class="btn btn-secondary" id="save-btn" style="flex:1">
+            💾 保存文本
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <div class="how-it-works">
+    <h3>💡 原理说明</h3>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">Step 01</div>
+        <div class="step-text">将文本转成二进制，每个字符占 8 位</div>
+      </div>
+      <div class="step">
+        <div class="step-num">Step 02</div>
+        <div class="step-text">在图片每个像素的 R/G/B 通道的最低位（LSB）嵌入 1 bit 数据</div>
+      </div>
+      <div class="step">
+        <div class="step-num">Step 03</div>
+        <div class="step-text">人眼无法察觉如此微小的颜色变化，图片看起来完全相同</div>
+      </div>
+      <div class="step">
+        <div class="step-num">Step 04</div>
+        <div class="step-text">解码时读取所有 LSB 位，重建二进制数据并转回文本</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const $ = id => document.getElementById(id);
+  
+  let encodeCanvas = null, encodeCtx = null;
+  let encodeImgData = null;
+  
+  // Tab switching
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      $(tab.dataset.tab + '-panel').classList.add('active');
+    });
+  });
+  
+  // Drag and drop helpers
+  function setupDrop(zone, input, onFile) {
+    zone.addEventListener('click', () => input.click());
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+    zone.addEventListener('drop', e => {
+      e.preventDefault();
+      zone.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file) onFile(file);
+    });
+    input.addEventListener('change', () => { if (input.files[0]) onFile(input.files[0]); });
+  }
+  
+  // Encode flow
+  setupDrop($('encode-drop'), $('encode-file'), file => loadImage(file, 'encode'));
+  
+  function loadImage(file, mode) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        
+        if (mode === 'encode') {
+          encodeCanvas = canvas;
+          encodeCtx = ctx;
+          encodeImgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          $('encode-img').src = e.target.result;
+          $('encode-preview').classList.add('show');
+          const pixels = canvas.width * canvas.height;
+          const maxChars = Math.floor(pixels / 8);
+          $('encode-meta').innerHTML = `<span>📐 ${img.width} × ${img.height}</span><span>🖼️ ${pixels.toLocaleString()} 像素</span><span>📦 可藏 ${maxChars.toLocaleString()} 字符</span>`;
+          updateCapacity();
+          $('encode-btn').disabled = false;
+        } else {
+          $('decode-img').src = e.target.result;
+          $('decode-preview').classList.add('show');
+          const pixels = canvas.width * canvas.height;
+          $('decode-meta').innerHTML = `<span>📐 ${img.width} × ${img.height}</span><span>🖼️ ${pixels.toLocaleString()} 像素</span>`;
+          $('decode-btn').disabled = false;
+          window._decodeCanvas = canvas;
+          window._decodeCtx = ctx;
+        }
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+  
+  function updateCapacity() {
+    const text = $('secret-text').value;
+    if (!encodeCanvas) return;
+    const pixels = encodeCanvas.width * encodeCanvas.height;
+    const maxChars = Math.floor(pixels * 3 / 8);
+    const used = text.length;
+    const pct = Math.min(100, (used / maxChars) * 100);
+    $('capacity-fill').style.width = pct + '%';
+    $('capacity-text').textContent = `已用 ${used.toLocaleString()} / ${maxChars.toLocaleString()} 字符`;
+    if (pct > 90) $('capacity-fill').style.background = 'linear-gradient(90deg, #ef4444, #f97316)';
+    else if (pct > 70) $('capacity-fill').style.background = 'linear-gradient(90deg, #f97316, #eab308)';
+    else $('capacity-fill').style.background = 'linear-gradient(90deg, var(--success), var(--accent2))';
+  }
+  
+  $('secret-text').addEventListener('input', updateCapacity);
+  
+  $('encode-btn').addEventListener('click', () => {
+    const text = $('secret-text').value;
+    if (!text.trim()) {
+      showStatus('encode-status', 'error', '请输入要隐藏的内容');
+      return;
+    }
+    encodeSecret(text);
+  });
+  
+  function encodeSecret(text) {
+    const data = encodeImgData.data;
+    const terminator = '§END§';
+    const fullText = text + terminator;
+    const bytes = new TextEncoder().encode(fullText);
+    
+    if (bytes.length * 8 > data.length * 3) {
+      showStatus('encode-status', 'error', `文字太长！最多能藏 ${Math.floor(data.length * 3 / 8 - terminator.length)} 个字符`);
+      return;
+    }
+    
+    // Write length header (4 bytes = 32 bits)
+    const len = bytes.length;
+    let bitIdx = 0;
+    
+    // Write length as 32-bit integer
+    for (let i = 31; i >= 0; i--) {
+      const bit = (len >> i) & 1;
+      const pixelIdx = Math.floor(bitIdx / 3);
+      const channel = bitIdx % 3;
+      data[pixelIdx * 4 + channel] = (data[pixelIdx * 4 + channel] & 0xFE) | bit;
+      bitIdx++;
+    }
+    
+    // Write bytes
+    for (let byte of bytes) {
+      for (let i = 7; i >= 0; i--) {
+        const bit = (byte >> i) & 1;
+        const pixelIdx = Math.floor(bitIdx / 3);
+        const channel = bitIdx % 3;
+        data[pixelIdx * 4 + channel] = (data[pixelIdx * 4 + channel] & 0xFE) | bit;
+        bitIdx++;
+      }
+    }
+    
+    encodeCtx.putImageData(encodeImgData, 0, 0);
+    
+    const outUrl = encodeCanvas.toDataURL('image/png');
+    $('download-btn').href = outUrl;
+    
+    $('result-size').textContent = `${encodeCanvas.width} × ${encodeCanvas.height}`;
+    $('result-chars').textContent = text.length.toLocaleString();
+    $('result-bits').textContent = bitIdx.toLocaleString();
+    $('result-ppb').textContent = (bitIdx / (encodeCanvas.width * encodeCanvas.height)).toFixed(2);
+    
+    $('encode-result').classList.add('show');
+    showStatus('encode-status', 'success', `✅ 成功隐藏 ${text.length} 个字符，消耗 ${bitIdx} bits`);
+  }
+  
+  // Decode flow
+  setupDrop($('decode-drop'), $('decode-file'), file => loadImage(file, 'decode'));
+  
+  $('decode-btn').addEventListener('click', () => {
+    if (!window._decodeCtx) return;
+    const imgData = window._decodeCtx.getImageData(0, 0, window._decodeCanvas.width, window._decodeCanvas.height);
+    decodeSecret(imgData);
+  });
+  
+  function decodeSecret(imgData) {
+    const data = imgData.data;
+    let bitIdx = 0;
+    
+    // Read length (32 bits)
+    let len = 0;
+    for (let i = 31; i >= 0; i--) {
+      const pixelIdx = Math.floor(bitIdx / 3);
+      const channel = bitIdx % 3;
+      const bit = data[pixelIdx * 4 + channel] & 1;
+      len = (len << 1) | bit;
+      bitIdx++;
+    }
+    
+    if (len <= 0 || len > 1000000) {
+      showStatus('decode-status', 'error', '未检测到隐藏信息或图片格式不支持');
+      return;
+    }
+    
+    // Read bytes
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      let byte = 0;
+      for (let j = 7; j >= 0; j--) {
+        const pixelIdx = Math.floor(bitIdx / 3);
+        const channel = bitIdx % 3;
+        if (pixelIdx * 4 + channel >= data.length) {
+          showStatus('decode-status', 'error', '数据不完整，解码失败');
+          return;
+        }
+        const bit = data[pixelIdx * 4 + channel] & 1;
+        byte = (byte << 1) | bit;
+        bitIdx++;
+      }
+      bytes[i] = byte;
+    }
+    
+    const fullText = new TextDecoder().decode(bytes);
+    const terminatorIdx = fullText.indexOf('§END§');
+    const text = terminatorIdx >= 0 ? fullText.slice(0, terminatorIdx) : fullText;
+    
+    $('decoded-text').textContent = text;
+    $('decode-result').classList.add('show');
+    showStatus('decode-status', 'success', `✅ 成功提取 ${text.length} 个字符`);
+  }
+  
+  function showStatus(id, type, msg) {
+    const el = $(id);
+    el.textContent = msg;
+    el.className = 'status-bar show ' + type;
+    el.style.display = 'block';
+    setTimeout(() => { el.style.display = 'none'; el.classList.remove('show'); }, 6000);
+  }
+  
+  // Reset buttons
+  $('encode-reset').addEventListener('click', () => {
+    $('encode-preview').classList.remove('show');
+    $('encode-result').classList.remove('show');
+    $('secret-text').value = '';
+    $('encode-btn').disabled = true;
+    $('capacity-fill').style.width = '0%';
+    $('capacity-text').textContent = '请先选择图片';
+    encodeCanvas = null; encodeCtx = null; encodeImgData = null;
+  });
+  
+  $('decode-reset').addEventListener('click', () => {
+    $('decode-preview').classList.remove('show');
+    $('decode-result').classList.remove('show');
+    $('decode-btn').disabled = true;
+    $('decoded-text').textContent = '';
+    window._decodeCanvas = null; window._decodeCtx = null;
+  });
+  
+  $('copy-btn').addEventListener('click', () => {
+    navigator.clipboard.writeText($('decoded-text').textContent).then(() => {
+      showStatus('decode-status', 'success', '✅ 已复制到剪贴板');
+    });
+  });
+  
+  $('save-btn').addEventListener('click', () => {
+    const text = $('decoded-text').textContent;
+    const blob = new Blob([text], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'decoded-secret.txt';
+    a.click();
+  });
+})();
+</script>
+</body>
+</html>

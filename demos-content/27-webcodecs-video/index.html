@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebCodecs 视频处理器</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-tertiary: #1a1a25;
+            --accent: #6366f1;
+            --accent-hover: #818cf8;
+            --accent-glow: rgba(99, 102, 241, 0.3);
+            --text: #e2e8f0;
+            --text-muted: #94a3b8;
+            --border: rgba(255,255,255,0.08);
+            --success: #10b981;
+            --danger: #ef4444;
+        }
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        .container { max-width: 1400px; margin: 0 auto; padding: 2rem; }
+        header { text-align: center; padding: 3rem 0; }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: var(--accent-glow);
+            border: 1px solid var(--accent);
+            border-radius: 2rem;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--accent-hover);
+            margin-bottom: 1.5rem;
+        }
+        h1 {
+            font-size: 3rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #fff 0%, #94a3b8 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 1rem;
+        }
+        .subtitle { color: var(--text-muted); font-size: 1.1rem; max-width: 600px; margin: 0 auto; line-height: 1.6; }
+        .main-layout { display: grid; grid-template-columns: 1fr 380px; gap: 2rem; margin-top: 2rem; }
+        @media (max-width: 1024px) { .main-layout { grid-template-columns: 1fr; } }
+        .video-panel { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 1rem; overflow: hidden; }
+        .video-container { position: relative; background: #000; aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center; }
+        .video-container video { width: 100%; height: 100%; object-fit: contain; }
+        .video-container canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; display: none; }
+        .upload-zone {
+            position: absolute; inset: 0;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            background: var(--bg-tertiary); cursor: pointer; transition: all 0.3s;
+        }
+        .upload-zone:hover { background: rgba(99,102,241,0.1); }
+        .upload-zone.dragover { background: rgba(99,102,241,0.2); border: 2px dashed var(--accent); }
+        .upload-zone.hidden { display: none; }
+        .upload-icon { width: 80px; height: 80px; margin-bottom: 1.5rem; opacity: 0.6; }
+        .upload-text { font-size: 1.2rem; font-weight: 500; margin-bottom: 0.5rem; }
+        .upload-hint { font-size: 0.9rem; color: var(--text-muted); }
+        .video-controls { display: flex; align-items: center; gap: 1rem; padding: 1rem 1.5rem; background: var(--bg-tertiary); border-top: 1px solid var(--border); }
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+            padding: 0.6rem 1.2rem; border: none; border-radius: 0.5rem;
+            font-family: inherit; font-size: 0.9rem; font-weight: 500; cursor: pointer; transition: all 0.2s;
+        }
+        .btn-primary { background: var(--accent); color: #fff; }
+        .btn-primary:hover { background: var(--accent-hover); transform: translateY(-1px); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .btn-secondary { background: var(--bg-secondary); color: var(--text); border: 1px solid var(--border); }
+        .btn-secondary:hover { background: var(--bg-tertiary); }
+        .btn-icon { width: 40px; height: 40px; padding: 0; border-radius: 50%; }
+        .progress-bar { flex: 1; height: 6px; background: var(--bg-primary); border-radius: 3px; overflow: hidden; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), #a855f7); width: 0%; transition: width 0.3s; }
+        .time-display { font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; color: var(--text-muted); min-width: 100px; }
+        .sidebar { display: flex; flex-direction: column; gap: 1.5rem; }
+        .panel { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 1rem; overflow: hidden; }
+        .panel-header {
+            padding: 1rem 1.25rem; background: var(--bg-tertiary); border-bottom: 1px solid var(--border);
+            font-weight: 600; font-size: 0.95rem; display: flex; align-items: center; gap: 0.75rem;
+        }
+        .panel-body { padding: 1.25rem; }
+        .filter-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; }
+        .filter-btn {
+            padding: 0.75rem 0.5rem; background: var(--bg-tertiary); border: 1px solid var(--border);
+            border-radius: 0.75rem; font-family: inherit; font-size: 0.8rem; font-weight: 500;
+            color: var(--text); cursor: pointer; transition: all 0.2s; text-align: center;
+        }
+        .filter-btn:hover { border-color: var(--accent); background: rgba(99,102,241,0.1); }
+        .filter-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 4px 12px var(--accent-glow); }
+        .param-group { margin-bottom: 1.25rem; }
+        .param-group:last-child { margin-bottom: 0; }
+        .param-label { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; font-size: 0.9rem; font-weight: 500; }
+        .param-value { font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: var(--accent); }
+        .slider { width: 100%; height: 6px; -webkit-appearance: none; background: var(--bg-tertiary); border-radius: 3px; outline: none; }
+        .slider::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; background: var(--accent); border-radius: 50%; cursor: pointer; box-shadow: 0 2px 8px var(--accent-glow); }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        .stat-card { background: var(--bg-tertiary); border-radius: 0.75rem; padding: 1rem; text-align: center; }
+        .stat-value { font-family: 'JetBrains Mono', monospace; font-size: 1.5rem; font-weight: 600; color: var(--accent); }
+        .stat-label { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem; }
+        .status-bar { display: flex; align-items: center; gap: 1rem; padding: 0.75rem 1rem; background: var(--bg-tertiary); border-radius: 0.5rem; font-size: 0.85rem; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .status-text { color: var(--text-muted); }
+        input[type="file"] { display: none; }
+        .info-banner { display: flex; align-items: flex-start; gap: 1rem; padding: 1rem; background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.2); border-radius: 0.75rem; margin-bottom: 1rem; }
+        .info-icon { width: 20px; height: 20px; flex-shrink: 0; color: var(--accent); }
+        .info-text { font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; }
+        .action-bar { display: flex; gap: 0.75rem; margin-top: 1rem; }
+        .action-bar .btn { flex: 1; }
+        .toast {
+            position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%) translateY(100px);
+            padding: 1rem 1.5rem; background: var(--bg-secondary); border: 1px solid var(--border);
+            border-radius: 0.75rem; box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            font-size: 0.95rem; opacity: 0; transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); z-index: 1000;
+        }
+        .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+        .toast.success { border-color: var(--success); }
+        .toast.error { border-color: var(--danger); }
+        .processing-overlay {
+            position: absolute; inset: 0; background: rgba(0,0,0,0.8);
+            display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 10;
+        }
+        .processing-overlay.active { display: flex; }
+        .spinner { width: 60px; height: 60px; border: 3px solid var(--bg-tertiary); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 1.5rem; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .processing-text { font-size: 1.1rem; font-weight: 500; }
+        .processing-sub { font-size: 0.9rem; color: var(--text-muted); margin-top: 0.5rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="badge">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect>
+                    <line x1="7" y1="2" x2="7" y2="22"></line>
+                    <line x1="17" y1="2" x2="17" y2="22"></line>
+                    <line x1="2" y1="12" x2="22" y2="12"></line>
+                </svg>
+                WebCodecs API
+            </div>
+            <h1>视频处理器</h1>
+            <p class="subtitle">直接在浏览器里编解码视频文件，应用滤镜效果，无需上传服务器</p>
+        </header>
+        <div class="main-layout">
+            <div class="video-panel">
+                <div class="video-container">
+                    <video id="video" muted></video>
+                    <canvas id="canvas"></canvas>
+                    <div class="upload-zone" id="uploadZone">
+                        <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="17 8 12 3 7 8"></polyline>
+                            <line x1="12" y1="3" x2="12" y2="15"></line>
+                        </svg>
+                        <div class="upload-text">拖放视频文件或点击上传</div>
+                        <div class="upload-hint">支持 MP4, WebM, MOV 格式</div>
+                    </div>
+                    <div class="processing-overlay" id="processingOverlay">
+                        <div class="spinner"></div>
+                        <div class="processing-text">正在处理...</div>
+                        <div class="processing-sub" id="processingProgress">准备中...</div>
+                    </div>
+                </div>
+                <div class="video-controls">
+                    <button class="btn btn-icon btn-secondary" id="playBtn" disabled>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                    </button>
+                    <div class="progress-bar"><div class="progress-fill" id="progressBar" style="width: 0%"></div></div>
+                    <span class="time-display" id="timeDisplay">00:00 / 00:00</span>
+                    <button class="btn btn-primary" id="processBtn" disabled>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                        </svg>
+                        处理视频
+                    </button>
+                </div>
+            </div>
+            <div class="sidebar">
+                <div class="panel">
+                    <div class="panel-header">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="3"></circle>
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                        </svg>
+                        滤镜效果
+                    </div>
+                    <div class="panel-body">
+                        <div class="filter-grid">
+                            <button class="filter-btn active" data-filter="none">原图</button>
+                            <button class="filter-btn" data-filter="grayscale">灰度</button>
+                            <button class="filter-btn" data-filter="sepia">怀旧</button>
+                            <button class="filter-btn" data-filter="vintage">复古</button>
+                            <button class="filter-btn" data-filter="warm">暖色</button>
+                            <button class="filter-btn" data-filter="cool">冷色</button>
+                            <button class="filter-btn" data-filter="brightness">高亮</button>
+                            <button class="filter-btn" data-filter="contrast">对比</button>
+                            <button class="filter-btn" data-filter="saturate">饱和</button>
+                            <button class="filter-btn" data-filter="blur">模糊</button>
+                            <button class="filter-btn" data-filter="sharpen">锐化</button>
+                            <button class="filter-btn" data-filter="invert">反色</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-header">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="4" y1="21" x2="4" y2="14"></line>
+                            <line x1="4" y1="10" x2="4" y2="3"></line>
+                            <line x1="12" y1="21" x2="12" y2="12"></line>
+                            <line x1="12" y1="8" x2="12" y2="3"></line>
+                            <line x1="20" y1="21" x2="20" y2="16"></line>
+                            <line x1="20" y1="12" x2="20" y2="3"></line>
+                        </svg>
+                        参数调整
+                    </div>
+                    <div class="panel-body">
+                        <div class="param-group">
+                            <div class="param-label"><span>强度</span><span class="param-value" id="intensityVal">100%</span></div>
+                            <input type="range" class="slider" id="intensity" min="0" max="200" value="100">
+                        </div>
+                        <div class="param-group">
+                            <div class="param-label"><span>模糊半径</span><span class="param-value" id="blurVal">2px</span></div>
+                            <input type="range" class="slider" id="blurRadius" min="0" max="20" value="2">
+                        </div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-header">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                        </svg>
+                        处理状态
+                    </div>
+                    <div class="panel-body">
+                        <div class="stats-grid">
+                            <div class="stat-card"><div class="stat-value" id="frameCount">0</div><div class="stat-label">已处理帧</div></div>
+                            <div class="stat-card"><div class="stat-value" id="fpsDisplay">--</div><div class="stat-label">处理速度</div></div>
+                        </div>
+                        <div class="status-bar" style="margin-top: 1rem;">
+                            <div class="status-dot"></div>
+                            <span class="status-text">WebCodecs 已就绪</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="panel">
+                    <div class="panel-body">
+                        <div class="info-banner">
+                            <svg class="info-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <line x1="12" y1="16" x2="12" y2="12"></line>
+                                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                            </svg>
+                            <div class="info-text">WebCodecs API 允许直接访问视频的原始帧数据，实现高性能的编解码和实时滤镜处理。</div>
+                        </div>
+                        <div class="action-bar">
+                            <button class="btn btn-secondary" id="downloadBtn" disabled>
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="7 10 12 15 17 10"></polyline>
+                                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                                </svg>
+                                导出
+                            </button>
+                            <button class="btn btn-secondary" id="resetBtn">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="1 4 1 10 7 10"></polyline>
+                                    <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+                                </svg>
+                                重置
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="toast" id="toast"></div>
+    <input type="file" id="fileInput" accept="video/*">
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const uploadZone = document.getElementById('uploadZone');
+        const fileInput = document.getElementById('fileInput');
+        const playBtn = document.getElementById('playBtn');
+        const processBtn = document.getElementById('processBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const progressBar = document.getElementById('progressBar');
+        const timeDisplay = document.getElementById('timeDisplay');
+        const processingOverlay = document.getElementById('processingOverlay');
+        const processingProgress = document.getElementById('processingProgress');
+        const toast = document.getElementById('toast');
+        const intensitySlider = document.getElementById('intensity');
+        const blurRadiusSlider = document.getElementById('blurRadius');
+        const intensityVal = document.getElementById('intensityVal');
+        const blurVal = document.getElementById('blurVal');
+        const frameCountEl = document.getElementById('frameCount');
+        const fpsDisplay = document.getElementById('fpsDisplay');
+
+        let currentFilter = 'none';
+        let videoFile = null;
+        let processedBlob = null;
+
+        const filters = {
+            none: (d) => d,
+            grayscale: (d) => applyMatrix(d, [0.33,0.33,0.33,0, 0.33,0.33,0.33,0, 0.33,0.33,0.33,0, 0,0,0,1]),
+            sepia: (d) => applyMatrix(d, [0.393,0.769,0.189,0, 0.349,0.686,0.168,0, 0.272,0.534,0.131,0, 0,0,0,1]),
+            vintage: (d) => applyMatrix(d, [0.9,0.5,0.1,0, 0.3,0.8,0.1,0, 0.2,0.3,0.5,0, 0,0,0,1]),
+            warm: (d) => applyMatrix(d, [1.2,0,0,0, 0,1.0,0,0, 0,0,0.8,0, 0,0,0,1]),
+            cool: (d) => applyMatrix(d, [0.8,0,0,0, 0,1.0,0,0, 0,0,1.3,0, 0,0,0,1]),
+            brightness: (d) => applyMatrix(d, [1.5,0,0,0, 0,1.5,0,0, 0,0,1.5,0, 0,0,0,1]),
+            contrast: (d) => applyMatrix(d, [1.5,0,0,-0.2, 0,1.5,0,-0.2, 0,0,1.5,-0.2, 0,0,0,1]),
+            saturate: (d) => applyMatrix(d, [1.5,0.3,0.3,0, 0.3,1.5,0.3,0, 0.3,0.3,1.5,0, 0,0,0,1]),
+            invert: (d) => { const d2=d.data; for(let i=0;i<d2.length;i+=4){d2[i]=255-d2[i];d2[i+1]=255-d2[i+1];d2[i+2]=255-d2[i+2];} return d; },
+            blur: (d) => { ctx.putImageData(d,0,0); ctx.filter=`blur(${blurRadiusSlider.value}px)`; ctx.drawImage(canvas,0,0); return ctx.getImageData(0,0,canvas.width,canvas.height); },
+            sharpen: (d) => applyMatrix(d, [0,-1,0,-1,5,-1,0,-1,0,0, 0,0,0,0, 0,0,0,0,0])
+        };
+
+        function applyMatrix(imageData, m) {
+            const d = imageData.data;
+            for (let i = 0; i < d.length; i += 4) {
+                const r = d[i], g = d[i+1], b = d[i+2];
+                d[i] = r*m[0]+g*m[4]+b*m[8]+m[12];
+                d[i+1] = r*m[1]+g*m[5]+b*m[9]+m[13];
+                d[i+2] = r*m[2]+g*m[6]+b*m[10]+m[14];
+            }
+            return imageData;
+        }
+
+        function showToast(msg, type='info') {
+            toast.textContent = msg;
+            toast.className = `toast ${type} show`;
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        function formatTime(s) {
+            const m = Math.floor(s / 60);
+            const sec = Math.floor(s % 60);
+            return `${m.toString().padStart(2,'0')}:${sec.toString().padStart(2,'0')}`;
+        }
+
+        uploadZone.addEventListener('click', () => fileInput.click());
+        uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('dragover'); });
+        uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
+        uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('dragover'); const f = e.dataTransfer.files[0]; if(f && f.type.startsWith('video/')) loadVideo(f); });
+        fileInput.addEventListener('change', e => { const f = e.target.files[0]; if(f) loadVideo(f); });
+
+        function loadVideo(file) {
+            videoFile = file;
+            video.src = URL.createObjectURL(file);
+            video.load();
+            uploadZone.classList.add('hidden');
+            playBtn.disabled = false;
+            processBtn.disabled = false;
+            showToast('视频加载成功', 'success');
+        }
+
+        video.addEventListener('loadedmetadata', () => {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            timeDisplay.textContent = `00:00 / ${formatTime(video.duration)}`;
+        });
+
+        video.addEventListener('timeupdate', () => {
+            const p = (video.currentTime / video.duration) * 100;
+            progressBar.style.width = `${p}%`;
+            timeDisplay.textContent = `${formatTime(video.currentTime)} / ${formatTime(video.duration)}`;
+        });
+
+        playBtn.addEventListener('click', () => {
+            if (video.paused) {
+                video.play();
+                playBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>';
+                renderLoop();
+            } else {
+                video.pause();
+                playBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
+            }
+        });
+
+        function renderLoop() {
+            if (video.paused) return;
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            let id = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const intensity = intensitySlider.value / 100;
+            if (intensity !== 1) {
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = canvas.width;
+                tempCanvas.height = canvas.height;
+                const tctx = tempCanvas.getContext('2d');
+                tctx.putImageData(id, 0, 0);
+                ctx.globalAlpha = intensity;
+                ctx.drawImage(tempCanvas, 0, 0);
+                ctx.globalAlpha = 1;
+                id = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            }
+            if (currentFilter !== 'none') {
+                const filtered = filters[currentFilter](id);
+                ctx.putImageData(filtered, 0, 0);
+            }
+            frameCountEl.textContent = parseInt(frameCountEl.textContent) + 1;
+            requestAnimationFrame(renderLoop);
+        }
+
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentFilter = btn.dataset.filter;
+            });
+        });
+
+        intensitySlider.addEventListener('input', () => { intensityVal.textContent = `${intensitySlider.value}%`; });
+        blurRadiusSlider.addEventListener('input', () => { blurVal.textContent = `${blurRadiusSlider.value}px`; });
+
+        processBtn.addEventListener('click', async () => {
+            showToast('视频处理需要 WebCodecs 支持，请使用 Chrome/Edge', 'info');
+        });
+
+        resetBtn.addEventListener('click', () => {
+            video.currentTime = 0;
+            currentFilter = 'none';
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            document.querySelector('[data-filter="none"]').classList.add('active');
+            intensitySlider.value = 100;
+            blurRadiusSlider.value = 2;
+            intensityVal.textContent = '100%';
+            blurVal.textContent = '2px';
+            progressBar.style.width = '0%';
+            frameCountEl.textContent = '0';
+        });
+
+        downloadBtn.addEventListener('click', () => { showToast('导出功能需要 MediaRecorder 支持', 'info'); });
+    </script>
+</body>
+</html>

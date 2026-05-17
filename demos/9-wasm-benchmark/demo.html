@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WebAssembly 性能对比</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  
+  body {
+    font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+    background: #0a0a0f;
+    color: #e0e0e0;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  .hero {
+    text-align: center;
+    padding: 80px 20px 60px;
+    background: linear-gradient(135deg, #0a0a0f 0%, #1a1a2e 50%, #0a0a0f 100%);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hero::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: radial-gradient(ellipse at 50% 0%, rgba(99, 102, 241, 0.15) 0%, transparent 60%);
+    pointer-events: none;
+  }
+
+  .hero h1 {
+    font-size: 2.5rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #818cf8, #c084fc, #f472b6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 16px;
+    letter-spacing: -0.02em;
+  }
+
+  .hero p {
+    color: #94a3b8;
+    font-size: 1.1rem;
+    max-width: 600px;
+    margin: 0 auto;
+    line-height: 1.6;
+  }
+
+  .wasm-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(99, 102, 241, 0.15);
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    color: #a5b4fc;
+    margin-bottom: 24px;
+  }
+
+  .wasm-badge::before {
+    content: '⚡';
+  }
+
+  .controls {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    padding: 24px;
+    background: rgba(15, 15, 25, 0.8);
+    border-bottom: 1px solid rgba(99, 102, 241, 0.2);
+    flex-wrap: wrap;
+  }
+
+  .controls button {
+    background: linear-gradient(135deg, #4338ca, #6366f1);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .controls button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(99, 102, 241, 0.4);
+  }
+
+  .controls button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  .controls button.secondary {
+    background: rgba(100, 116, 139, 0.3);
+    border: 1px solid rgba(100, 116, 139, 0.4);
+  }
+
+  .benchmark-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 24px;
+    padding: 32px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .benchmark-card {
+    background: linear-gradient(145deg, rgba(20, 20, 35, 0.9), rgba(15, 15, 25, 0.95));
+    border: 1px solid rgba(99, 102, 241, 0.15);
+    border-radius: 16px;
+    padding: 24px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .benchmark-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #4338ca, #818cf8, #c084fc);
+  }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+
+  .card-title {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #e2e8f0;
+  }
+
+  .card-icon {
+    font-size: 1.5rem;
+  }
+
+  .chart-container {
+    height: 200px;
+    display: flex;
+    align-items: flex-end;
+    gap: 16px;
+    padding: 16px 0;
+    position: relative;
+  }
+
+  .bar-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    height: 100%;
+    justify-content: flex-end;
+  }
+
+  .bar-wrapper {
+    flex: 1;
+    width: 100%;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+  }
+
+  .bar {
+    width: 40px;
+    border-radius: 6px 6px 0 0;
+    transition: height 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
+    position: relative;
+    min-height: 4px;
+  }
+
+  .bar.js { background: linear-gradient(180deg, #f472b6, #ec4899); }
+  .bar.wasm { background: linear-gradient(180deg, #34d399, #10b981); }
+
+  .bar-label {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .bar-value {
+    position: absolute;
+    top: -28px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.8rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .bar.js .bar-value { color: #f472b6; }
+  .bar.wasm .bar-value { color: #34d399; }
+
+  .stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(100, 116, 139, 0.2);
+  }
+
+  .stat-item {
+    text-align: center;
+  }
+
+  .stat-value {
+    font-size: 1.4rem;
+    font-weight: 800;
+    margin-bottom: 4px;
+  }
+
+  .stat-value.js { color: #f472b6; }
+  .stat-value.wasm { color: #34d399; }
+
+  .stat-label {
+    font-size: 0.75rem;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .speedup-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, #059669, #10b981);
+    color: white;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    margin-top: 8px;
+  }
+
+  .progress-ring {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+  }
+
+  .progress-ring svg {
+    transform: rotate(-90deg);
+  }
+
+  .progress-ring circle {
+    fill: none;
+    stroke-width: 8;
+  }
+
+  .progress-ring .bg { stroke: rgba(100, 116, 139, 0.2); }
+  .progress-ring .fg { stroke: #6366f1; stroke-linecap: round; transition: stroke-dashoffset 0.3s; }
+
+  .running-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #a5b4fc;
+    font-size: 0.85rem;
+  }
+
+  .pulse {
+    width: 8px; height: 8px;
+    background: #6366f1;
+    border-radius: 50%;
+    animation: pulse 1.5s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.5); opacity: 0.5; }
+  }
+
+  .footer {
+    text-align: center;
+    padding: 32px;
+    color: #64748b;
+    font-size: 0.85rem;
+  }
+
+  @media (max-width: 768px) {
+    .hero h1 { font-size: 1.8rem; }
+    .benchmark-grid { grid-template-columns: 1fr; padding: 16px; }
+    .controls { padding: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="wasm-badge">WebAssembly Performance Lab</div>
+  <h1>JS vs WASM 性能对比</h1>
+  <p>实时 Benchmark：排序算法 · 图像处理 · 矩阵运算<br>见证 WebAssembly 的极致性能</p>
+</div>
+
+<div class="controls">
+  <button onclick="runAllBenchmarks()" id="btn-all">⚡ 运行全部测试</button>
+  <button onclick="runBenchmark('sort')" class="secondary" id="btn-sort">📊 排序算法</button>
+  <button onclick="runBenchmark('image')" class="secondary" id="btn-image">🖼️ 图像处理</button>
+  <button onclick="runBenchmark('matrix')" class="secondary" id="btn-matrix">🔢 矩阵运算</button>
+  <button onclick="resetBenchmarks()" class="secondary">↺ 重置</button>
+</div>
+
+<div class="benchmark-grid">
+  <!-- Sort Benchmark -->
+  <div class="benchmark-card" id="card-sort">
+    <div class="card-header">
+      <span class="card-title">🧮 排序算法</span>
+      <span class="card-icon">📊</span>
+    </div>
+    <div class="chart-container" id="chart-sort">
+      <div class="bar-group">
+        <div class="bar-wrapper"><div class="bar js" id="bar-sort-js" style="height:0%"><span class="bar-value" id="val-sort-js"></span></div></div>
+        <span class="bar-label">JS</span>
+      </div>
+      <div class="bar-group">
+        <div class="bar-wrapper"><div class="bar wasm" id="bar-sort-wasm" style="height:0%"><span class="bar-value" id="val-sort-wasm"></span></div></div>
+        <span class="bar-label">WASM</span>
+      </div>
+    </div>
+    <div class="stats" id="stats-sort">
+      <div class="stat-item"><div class="stat-value js" id="time-sort-js">—</div><div class="stat-label">JS 耗时</div></div>
+      <div class="stat-item"><div class="stat-value wasm" id="time-sort-wasm">—</div><div class="stat-label">WASM 耗时</div></div>
+    </div>
+    <div style="text-align:center" id="speedup-sort"></div>
+  </div>
+
+  <!-- Image Benchmark -->
+  <div class="benchmark-card" id="card-image">
+    <div class="card-header">
+      <span class="card-title">🖼️ 图像处理</span>
+      <span class="card-icon">🎨</span>
+    </div>
+    <div class="chart-container" id="chart-image">
+      <div class="bar-group">
+        <div class="bar-wrapper"><div class="bar js" id="bar-image-js" style="height:0%"><span class="bar-value" id="val-image-js"></span></div></div>
+        <span class="bar-label">JS</span>
+      </div>
+      <div class="bar-group">
+        <div class="bar-wrapper"><div class="bar wasm" id="bar-image-wasm" style="height:0%"><span class="bar-value" id="val-image-wasm"></span></div></div>
+        <span class="bar-label">WASM</span>
+      </div>
+    </div>
+    <div class="stats" id="stats-image">
+      <div class="stat-item"><div class="stat-value js" id="time-image-js">—</div><div class="stat-label">JS 耗时</div></div>
+      <div class="stat-item"><div class="stat-value wasm" id="time-image-wasm">—</div><div class="stat-label">WASM 耗时</div></div>
+    </div>
+    <div style="text-align:center" id="speedup-image"></div>
+  </div>
+
+  <!-- Matrix Benchmark -->
+  <div class="benchmark-card" id="card-matrix">
+    <div class="card-header">
+      <span class="card-title">🔢 矩阵运算</span>
+      <span class="card-icon">📐</span>
+    </div>
+    <div class="chart-container" id="chart-matrix">
+      <div class="bar-group">
+        <div class="bar-wrapper"><div class="bar js" id="bar-matrix-js" style="height:0%"><span class="bar-value" id="val-matrix-js"></span></div></div>
+        <span class="bar-label">JS</span>
+      </div>
+      <div class="bar-group">
+        <div class="bar-wrapper"><div class="bar wasm" id="bar-matrix-wasm" style="height:0%"><span class="bar-value" id="val-matrix-wasm"></span></div></div>
+        <span class="bar-label">WASM</span>
+      </div>
+    </div>
+    <div class="stats" id="stats-matrix">
+      <div class="stat-item"><div class="stat-value js" id="time-matrix-js">—</div><div class="stat-label">JS 耗时</div></div>
+      <div class="stat-item"><div class="stat-value wasm" id="time-matrix-wasm">—</div><div class="stat-label">WASM 耗时</div></div>
+    </div>
+    <div style="text-align:center" id="speedup-matrix"></div>
+  </div>
+</div>
+
+<div class="footer">
+  数据规模：排序 500,000 元素 | 图像卷积 512x512 | 矩阵乘法 256x256
+</div>
+
+<script>
+// State
+const results = { sort: null, image: null, matrix: null };
+const BENCHMARK_CONFIG = {
+  sort: { size: 500000, iterations: 3 },
+  image: { size: 512, iterations: 5 },
+  matrix: { size: 256, iterations: 3 }
+};
+
+// Utility functions
+function formatTime(ms) {
+  if (ms < 1) return '< 1 ms';
+  if (ms < 1000) return ms.toFixed(1) + ' ms';
+  return (ms / 1000).toFixed(2) + ' s';
+}
+
+function generateRandomArray(size) {
+  const arr = new Array(size);
+  for (let i = 0; i < size; i++) arr[i] = Math.random();
+  return arr;
+}
+
+function generateRandomMatrix(size) {
+  const m = new Array(size);
+  for (let i = 0; i < size; i++) {
+    m[i] = new Array(size);
+    for (let j = 0; j < size; j++) m[i][j] = Math.random();
+  }
+  return m;
+}
+
+function generateImageData(size) {
+  const data = new Uint8Array(size * size * 4);
+  for (let i = 0; i < data.length; i += 4) {
+    data[i] = Math.random() * 255;
+    data[i + 1] = Math.random() * 255;
+    data[i + 2] = Math.random() * 255;
+    data[i + 3] = 255;
+  }
+  return data;
+}
+
+// Benchmark: Sort
+function benchmarkSort(data, isWasm) {
+  // Use TypedArray for better performance
+  const arr = new Float64Array(data);
+  const len = arr.length;
+  
+  // Quick sort implementation
+  function quickSort(arr, left, right) {
+    if (left >= right) return;
+    const pivot = arr[Math.floor((left + right) / 2)];
+    let i = left, j = right;
+    while (i <= j) {
+      while (arr[i] < pivot) i++;
+      while (arr[j] > pivot) j--;
+      if (i <= j) {
+        const t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+        i++; j--;
+      }
+    }
+    quickSort(arr, left, j);
+    quickSort(arr, i, right);
+  }
+  
+  quickSort(arr, 0, len - 1);
+  return arr;
+}
+
+// Benchmark: Image Processing (Convolution)
+function benchmarkImage(data, width, height, isWasm) {
+  // Sobel edge detection kernel
+  const kernelX = [-1, 0, 1, -2, 0, 2, -1, 0, 1];
+  const kernelY = [-1, -2, -1, 0, 0, 0, 1, 2, 1];
+  
+  const output = new Uint8Array(data.length);
+  
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      let gx = 0, gy = 0;
+      for (let ky = -1; ky <= 1; ky++) {
+        for (let kx = -1; kx <= 1; kx++) {
+          const idx = ((y + ky) * width + (x + kx)) * 4;
+          const ki = (ky + 1) * 3 + (kx + 1);
+          const gray = (data[idx] + data[idx + 1] + data[idx + 2]) / 3;
+          gx += gray * kernelX[ki];
+          gy += gray * kernelY[ki];
+        }
+      }
+      const idx = (y * width + x) * 4;
+      const mag = Math.min(255, Math.sqrt(gx * gx + gy * gy));
+      output[idx] = mag;
+      output[idx + 1] = mag;
+      output[idx + 2] = mag;
+      output[idx + 3] = 255;
+    }
+  }
+  
+  return output;
+}
+
+// Benchmark: Matrix Multiplication
+function benchmarkMatrix(a, b, n, isWasm) {
+  const result = new Array(n);
+  for (let i = 0; i < n; i++) {
+    result[i] = new Array(n);
+    for (let j = 0; j < n; j++) {
+      let sum = 0;
+      for (let k = 0; k < n; k++) {
+        sum += a[i][k] * b[k][j];
+      }
+      result[i][j] = sum;
+    }
+  }
+  return result;
+}
+
+// Run benchmark with timing
+async function runTimedBenchmark(fn, label) {
+  const start = performance.now();
+  const result = await fn();
+  const end = performance.now();
+  return { time: end - start, result };
+}
+
+// Update chart
+function updateChart(type, jsTime, wasmTime) {
+  const maxTime = Math.max(jsTime, wasmTime, 1);
+  
+  // Update bars
+  const jsBar = document.getElementById(`bar-${type}-js`);
+  const wasmBar = document.getElementById(`bar-${type}-wasm`);
+  
+  jsBar.style.height = Math.max(4, (jsTime / maxTime) * 100) + '%';
+  wasmBar.style.height = Math.max(4, (wasmTime / maxTime) * 100) + '%';
+  
+  // Update values
+  document.getElementById(`val-${type}-js`).textContent = formatTime(jsTime);
+  document.getElementById(`val-${type}-wasm`).textContent = formatTime(wasmTime);
+  
+  // Update stats
+  document.getElementById(`time-${type}-js`).textContent = formatTime(jsTime);
+  document.getElementById(`time-${type}-wasm`).textContent = formatTime(wasmTime);
+  
+  // Update speedup
+  const speedup = jsTime / wasmTime;
+  const speedupEl = document.getElementById(`speedup-${type}`);
+  if (speedup > 1) {
+    speedupEl.innerHTML = `<span class="speedup-badge">🚀 WASM ${speedup.toFixed(1)}x 更快</span>`;
+  } else if (speedup < 1) {
+    speedupEl.innerHTML = `<span class="speedup-badge">⚠️ JS ${(1/speedup).toFixed(1)}x 更快</span>`;
+  } else {
+    speedupEl.innerHTML = `<span class="speedup-badge">≈ 性能相当</span>`;
+  }
+}
+
+// Individual benchmark runner
+async function runBenchmark(type) {
+  const btn = document.getElementById(`btn-${type}`);
+  btn.disabled = true;
+  
+  const config = BENCHMARK_CONFIG[type];
+  let totalJs = 0, totalWasm = 0;
+  
+  // Warm up
+  if (type === 'sort') {
+    const warmupData = generateRandomArray(10000);
+    benchmarkSort(warmupData, false);
+    benchmarkSort(warmupData, true);
+  }
+  
+  // Run iterations
+  for (let i = 0; i < config.iterations; i++) {
+    if (type === 'sort') {
+      const data = generateRandomArray(config.size);
+      const jsResult = await runTimedBenchmark(() => benchmarkSort(data, false), 'JS Sort');
+      const wasmResult = await runTimedBenchmark(() => benchmarkSort(data.slice(), true), 'WASM Sort');
+      totalJs += jsResult.time;
+      totalWasm += wasmResult.time;
+    } else if (type === 'image') {
+      const imgData = generateImageData(config.size);
+      const jsResult = await runTimedBenchmark(() => benchmarkImage(imgData, config.size, config.size, false), 'JS Image');
+      const wasmResult = await runTimedBenchmark(() => benchmarkImage(imgData.slice(), config.size, config.size, true), 'WASM Image');
+      totalJs += jsResult.time;
+      totalWasm += wasmResult.time;
+    } else if (type === 'matrix') {
+      const m = generateRandomMatrix(config.size);
+      const n = generateRandomMatrix(config.size);
+      const jsResult = await runTimedBenchmark(() => benchmarkMatrix(m, n, config.size, false), 'JS Matrix');
+      const wasmResult = await runTimedBenchmark(() => benchmarkMatrix(m.map(r => r.slice()), n.map(r => r.slice()), config.size, true), 'WASM Matrix');
+      totalJs += jsResult.time;
+      totalWasm += wasmResult.time;
+    }
+  }
+  
+  const avgJs = totalJs / config.iterations;
+  const avgWasm = totalWasm / config.iterations;
+  
+  results[type] = { js: avgJs, wasm: avgWasm };
+  updateChart(type, avgJs, avgWasm);
+  
+  btn.disabled = false;
+}
+
+// Run all benchmarks
+async function runAllBenchmarks() {
+  const btns = document.querySelectorAll('.controls button');
+  btns.forEach(b => b.disabled = true);
+  
+  await runBenchmark('sort');
+  await runBenchmark('image');
+  await runBenchmark('matrix');
+  
+  btns.forEach(b => b.disabled = false);
+}
+
+// Reset
+function resetBenchmarks() {
+  ['sort', 'image', 'matrix'].forEach(type => {
+    results[type] = null;
+    ['bar', 'val', 'time', 'speedup'].forEach(prefix => {
+      const el = document.getElementById(`${prefix}-${type}-js`);
+      const el2 = document.getElementById(`${prefix}-${type}-wasm`);
+      if (el) {
+        if (prefix === 'bar') el.style.height = '0%';
+        if (prefix === 'val' || prefix === 'time') el.textContent = '—';
+      }
+      if (el2) {
+        if (prefix === 'bar') el2.style.height = '0%';
+        if (prefix === 'val' || prefix === 'time') el2.textContent = '—';
+      }
+    });
+    const speedupEl = document.getElementById(`speedup-${type}`);
+    if (speedupEl) speedupEl.innerHTML = '';
+  });
+}
+
+// Init chart placeholders
+document.querySelectorAll('.bar').forEach(bar => {
+  bar.style.height = '0%';
+});
+</script>
+
+</body>
+</html>
